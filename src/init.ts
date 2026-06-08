@@ -1,32 +1,32 @@
 // Prevent read-only window.fetch assignment errors in sandbox/iframe environments
 if (typeof window !== 'undefined') {
+  let activeFetch = window.fetch;
   try {
-    const originalFetch = window.fetch;
-    // Making window.fetch fully writable and configurable via a data descriptor
-    // guarantees any third-party assignment to window.fetch works without throwing 
-    // "Cannot set property fetch of #<Window> which has only a getter" exceptions.
     Object.defineProperty(window, 'fetch', {
-      value: originalFetch,
-      writable: true,
+      get() {
+        return activeFetch;
+      },
+      set(val) {
+        activeFetch = val;
+      },
       configurable: true,
       enumerable: true
     });
   } catch (e) {
-    console.warn("Failed to patch window.fetch property descriptor with data descriptor:", e);
+    console.warn("Failed to patch window.fetch property descriptor directly:", e);
     try {
-      const originalFetch = window.fetch;
-      Object.defineProperty(window, 'fetch', {
+      Object.defineProperty(Window.prototype, 'fetch', {
         get() {
-          return originalFetch;
+          return activeFetch;
         },
         set(val) {
-          console.warn("Muted attempt to overwrite window.fetch:", val);
+          activeFetch = val;
         },
         configurable: true,
         enumerable: true
       });
     } catch (err) {
-      console.warn("Failed to fallback patch window.fetch:", err);
+      console.warn("Failed to patch Window.prototype.fetch property descriptor:", err);
     }
   }
 
