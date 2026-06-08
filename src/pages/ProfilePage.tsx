@@ -44,6 +44,8 @@ export default function ProfilePage({ user }: { user: any }) {
   const [newName, setNewName] = useState(user?.displayName || '');
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
   const [chatBgColor, setChatBgColor] = useState('default');
+  const [emailNotifyFriendRequest, setEmailNotifyFriendRequest] = useState(true);
+  const [emailNotifyDirectMessage, setEmailNotifyDirectMessage] = useState(true);
   const [updateLoading, setUpdateLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -137,15 +139,21 @@ export default function ProfilePage({ user }: { user: any }) {
         if (val.chatBgColor) {
           setChatBgColor(val.chatBgColor);
         }
+        setEmailNotifyFriendRequest(val.emailNotifyFriendRequest !== false);
+        setEmailNotifyDirectMessage(val.emailNotifyDirectMessage !== false);
       } else if (isMe) {
         setProfileUser({
           uid: user.uid,
           displayName: user.displayName,
           email: user.email,
           photoURL: user.photoURL,
-          chatBgColor: 'default'
+          chatBgColor: 'default',
+          emailNotifyFriendRequest: true,
+          emailNotifyDirectMessage: true
         });
         setChatBgColor('default');
+        setEmailNotifyFriendRequest(true);
+        setEmailNotifyDirectMessage(true);
       }
 
       // Fetch Posts from Firestore
@@ -348,8 +356,10 @@ export default function ProfilePage({ user }: { user: any }) {
     const nameChanged = newName.trim() && newName !== user.displayName;
     const photoChanged = photoURL.trim() !== (user.photoURL || '');
     const bgChanged = chatBgColor !== (profileUser?.chatBgColor || 'default');
+    const friendNotifyChanged = emailNotifyFriendRequest !== (profileUser?.emailNotifyFriendRequest !== false);
+    const dmNotifyChanged = emailNotifyDirectMessage !== (profileUser?.emailNotifyDirectMessage !== false);
 
-    if (!nameChanged && !photoChanged && !bgChanged) {
+    if (!nameChanged && !photoChanged && !bgChanged && !friendNotifyChanged && !dmNotifyChanged) {
       setIsEditing(false);
       return;
     }
@@ -384,14 +394,23 @@ export default function ProfilePage({ user }: { user: any }) {
         await dbUpdate(dbRef(rtdb, `users/${user.uid}`), {
           displayName: finalName,
           photoURL: finalPhoto || '',
-          chatBgColor: chatBgColor
+          chatBgColor: chatBgColor,
+          emailNotifyFriendRequest: emailNotifyFriendRequest,
+          emailNotifyDirectMessage: emailNotifyDirectMessage
         });
       } catch (dbErr) {
         console.warn("Could not sync profile update to presence database", dbErr);
       }
       
       setIsEditing(false);
-      setProfileUser((prev: any) => prev ? { ...prev, displayName: finalName, photoURL: finalPhoto || '', chatBgColor } : null);
+      setProfileUser((prev: any) => prev ? { 
+        ...prev, 
+        displayName: finalName, 
+        photoURL: finalPhoto || '', 
+        chatBgColor,
+        emailNotifyFriendRequest,
+        emailNotifyDirectMessage
+      } : null);
     } catch (error: any) {
       console.error("Error updating profile:", error);
       alert("Error updating profile: " + (error?.message || error));
@@ -516,15 +535,44 @@ export default function ProfilePage({ user }: { user: any }) {
                   })}
                 </div>
               </div>
-              <div className="flex justify-center gap-2 mt-2">
+
+              {/* Email Notifications Settings */}
+              <div className="w-full text-left mt-3.5 border-t border-neutral-150 pt-2.5">
+                <label className="text-xs font-semibold text-neutral-600 block mb-2">Email Notifications</label>
+                <div className="space-y-2.5 bg-neutral-50 p-2.5 rounded-xl border border-neutral-200">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-neutral-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={emailNotifyFriendRequest}
+                      onChange={(e) => setEmailNotifyFriendRequest(e.target.checked)}
+                      className="w-4 h-4 text-indigo-650 accent-indigo-650 border-neutral-300 rounded focus:ring-indigo-550 cursor-pointer"
+                    />
+                    <span>New friend requests</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-neutral-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={emailNotifyDirectMessage}
+                      onChange={(e) => setEmailNotifyDirectMessage(e.target.checked)}
+                      className="w-4 h-4 text-indigo-650 accent-indigo-650 border-neutral-300 rounded focus:ring-indigo-550 cursor-pointer"
+                    />
+                    <span>New direct messages</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-center gap-2 mt-3.5">
                 <button onClick={handleUpdateProfile} disabled={updateLoading} className="text-green-600 p-1.5 px-3 bg-green-50 hover:bg-green-100 rounded text-sm font-medium transition-colors flex items-center cursor-pointer">
                   <Check className="w-4 h-4 mr-1" /> Save
                 </button>
                 <button 
                   onClick={() => { 
                     setIsEditing(false); 
-                    setNewName(user?.displayName || ''); 
-                    setPhotoURL(user?.photoURL || ''); 
+                    setNewName(profileUser?.displayName || user?.displayName || ''); 
+                    setPhotoURL(profileUser?.photoURL || user?.photoURL || ''); 
+                    setChatBgColor(profileUser?.chatBgColor || 'default');
+                    setEmailNotifyFriendRequest(profileUser?.emailNotifyFriendRequest !== false);
+                    setEmailNotifyDirectMessage(profileUser?.emailNotifyDirectMessage !== false);
                   }} 
                   disabled={updateLoading} 
                   className="text-red-500 p-1.5 px-3 bg-red-50 hover:bg-red-100 rounded text-sm font-medium transition-colors flex items-center cursor-pointer"
@@ -622,19 +670,40 @@ export default function ProfilePage({ user }: { user: any }) {
               <span className="font-semibold text-neutral-900">{loading ? '-' : posts.length}</span>
             </div>
             {isMe && (
-              <div className="flex items-center justify-between text-sm border-t border-neutral-100 pt-3">
-                <span className="text-neutral-500 flex items-center">
-                  <div className={`w-3.5 h-3.5 rounded-full border border-neutral-350 mr-2 ${
-                    chatBgColor === 'default' ? 'bg-[#f5f5f5]' :
-                    chatBgColor === 'dark' ? 'bg-[#18181b]' :
-                    CHAT_BG_PRESETS.find(p => p.id === chatBgColor)?.bgClass || 'bg-neutral-100'
-                  }`} />
-                  Chat Backdrop Style
-                </span>
-                <span className="font-semibold text-neutral-900 capitalize">
-                  {CHAT_BG_PRESETS.find(p => p.id === chatBgColor)?.name || 'Default'}
-                </span>
-              </div>
+              <>
+                <div className="flex items-center justify-between text-sm border-t border-neutral-100 pt-3">
+                  <span className="text-neutral-500 flex items-center">
+                    <div className={`w-3.5 h-3.5 rounded-full border border-neutral-350 mr-2 ${
+                      chatBgColor === 'default' ? 'bg-[#f5f5f5]' :
+                      chatBgColor === 'dark' ? 'bg-[#18181b]' :
+                      CHAT_BG_PRESETS.find(p => p.id === chatBgColor)?.bgClass || 'bg-neutral-100'
+                    }`} />
+                    Chat Backdrop Style
+                  </span>
+                  <span className="font-semibold text-neutral-900 capitalize">
+                    {CHAT_BG_PRESETS.find(p => p.id === chatBgColor)?.name || 'Default'}
+                  </span>
+                </div>
+                <div className="border-t border-neutral-100 pt-3 space-y-2 text-xs">
+                  <span className="font-semibold text-neutral-600 block">Email Options</span>
+                  <div className="flex items-center justify-between text-neutral-500">
+                    <span>Friend requests:</span>
+                    <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                      emailNotifyFriendRequest ? 'bg-indigo-50 text-indigo-700 border border-indigo-150' : 'bg-neutral-50 text-neutral-500 border border-neutral-200'
+                    }`}>
+                      {emailNotifyFriendRequest ? 'Opted-In' : 'Opted-Out'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-neutral-500">
+                    <span>Direct messages:</span>
+                    <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                      emailNotifyDirectMessage ? 'bg-indigo-50 text-indigo-700 border border-indigo-150' : 'bg-neutral-50 text-neutral-500 border border-neutral-200'
+                    }`}>
+                      {emailNotifyDirectMessage ? 'Opted-In' : 'Opted-Out'}
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
           </div>
           

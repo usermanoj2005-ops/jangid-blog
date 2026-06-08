@@ -227,6 +227,8 @@ export default function ChatPage({ user }: { user: any }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chatBgColor, setChatBgColor] = useState<string>('default');
+  const [typingUsers, setTypingUsers] = useState<any[]>([]);
+  const typingTimeoutRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -579,6 +581,82 @@ export default function ChatPage({ user }: { user: any }) {
     return () => unsubscribeMyUser();
   }, [user?.uid]);
 
+  // Typing Indicator Logic
+  const handleSelfTyping = () => {
+    if (!user?.uid || !activeChat) return;
+    const chatKey = activeChat === 'global' ? 'global' : [user.uid, activeChat].sort().join('_');
+    const typingRef = ref(rtdb, `typing/${chatKey}/${user.uid}`);
+    
+    set(typingRef, {
+      typing: true,
+      displayName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+      timestamp: Date.now()
+    }).catch(err => console.warn("Could not set typing indicator:", err));
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      remove(typingRef).catch(err => console.warn("Could not remove typing indicator:", err));
+    }, 2500);
+  };
+
+  const clearSelfTyping = () => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (!user?.uid || !activeChat) return;
+    const chatKey = activeChat === 'global' ? 'global' : [user.uid, activeChat].sort().join('_');
+    remove(ref(rtdb, `typing/${chatKey}/${user.uid}`)).catch(err => console.warn("Could not clear typing indicator:", err));
+  };
+
+  // Subscribe to other users typing in active chat
+  useEffect(() => {
+    if (!user?.uid || !activeChat) return;
+    
+    const chatKey = activeChat === 'global' ? 'global' : [user.uid, activeChat].sort().join('_');
+    const typingListRef = ref(rtdb, `typing/${chatKey}`);
+    
+    const unsubscribeTyping = onValue(typingListRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const activeTyping: any[] = [];
+        const now = Date.now();
+        
+        Object.entries(data).forEach(([key, val]: [string, any]) => {
+          if (key !== user.uid && val && val.typing) {
+            // Treat as valid if updated in past 5 seconds
+            if (now - (val.timestamp || 0) < 5000) {
+              activeTyping.push({
+                uid: key,
+                displayName: val.displayName || 'Someone'
+              });
+            }
+          }
+        });
+        setTypingUsers(activeTyping);
+      } else {
+        setTypingUsers([]);
+      }
+    });
+
+    return () => {
+      unsubscribeTyping();
+      setTypingUsers([]);
+      if (user?.uid) {
+        remove(ref(rtdb, `typing/${chatKey}/${user.uid}`)).catch(() => {});
+      }
+    };
+  }, [activeChat, user?.uid]);
+
+  // Smooth scroll into view when a user starts typing
+  useEffect(() => {
+    if (typingUsers.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [typingUsers.length]);
+
   // 2. Fetch my blocks
   useEffect(() => {
     const blocksRef = ref(rtdb, `blocks/${user.uid}`);
@@ -924,6 +1002,7 @@ export default function ChatPage({ user }: { user: any }) {
         authorPhoto: user.photoURL || '',
         timestamp: rtdbServerTimestamp()
       });
+      clearSelfTyping();
       setNewMessage('');
       setShowEmojis(false);
       setEmojiSearch('');
@@ -1050,6 +1129,7 @@ export default function ChatPage({ user }: { user: any }) {
   // Quick or emoji picker insert
   const insertEmoji = (emojiChar: string) => {
     setNewMessage(prev => prev + emojiChar);
+    handleSelfTyping();
   };
 
   // Toggle quick reactions on any message
@@ -1803,6 +1883,32 @@ export default function ChatPage({ user }: { user: any }) {
               );
             })
           )}
+          {typingUsers.length > 0 && (
+            <div className="flex items-start gap-2.5 max-w-lg mb-4 select-none animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0 text-indigo-600 animate-pulse">
+                <MessageSquare className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <div className={`p-3 rounded-2xl rounded-tl-none border shadow-xs inline-flex items-center gap-1.5 ${
+                  chatBgColor === 'dark' 
+                    ? 'bg-neutral-800 border-neutral-700/60 text-neutral-300' 
+                    : 'bg-white border-neutral-200 text-neutral-800'
+                }`}>
+                  <span className="text-xs font-bold font-sans">
+                    {typingUsers.map(u => u.displayName).join(', ')}
+                  </span>
+                  <span className="text-xs text-neutral-500 font-medium animate-pulse">
+                    {typingUsers.length === 1 ? 'is typing' : 'are typing'}
+                  </span>
+                  <span className="flex gap-1 items-center ml-1">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '-0.3s' }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '-0.15s' }} />
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -1952,7 +2058,10 @@ export default function ChatPage({ user }: { user: any }) {
                   {/* Chat Input Text Box */}
                   <textarea
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      handleSelfTyping();
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
