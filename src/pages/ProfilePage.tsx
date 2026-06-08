@@ -30,6 +30,7 @@ export default function ProfilePage({ user }: { user: any }) {
   const [hasConnection, setHasConnection] = useState<boolean | null>(null);
   const [hasSentRequest, setHasSentRequest] = useState<boolean | null>(null);
   const [hasRecvRequest, setHasRecvRequest] = useState<boolean | null>(null);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   useEffect(() => {
     if (targetUid) {
@@ -217,7 +218,14 @@ export default function ProfilePage({ user }: { user: any }) {
 
   const handleRemoveConnection = async () => {
     if (!user?.uid || !targetUid || isMe || requestActionLoading) return;
-    if (!window.confirm("Are you sure you want to remove this connection? You won't be able to message each other anymore.")) return;
+    
+    if (!confirmDisconnect) {
+      setConfirmDisconnect(true);
+      setTimeout(() => {
+        setConfirmDisconnect(false);
+      }, 4000);
+      return;
+    }
     
     setRequestActionLoading(true);
     try {
@@ -244,6 +252,7 @@ export default function ProfilePage({ user }: { user: any }) {
       } catch (e) {}
 
       setConnectionStatus('none');
+      setConfirmDisconnect(false);
     } catch (err: any) {
       console.error("Error removing connection:", err);
       alert("Failed to remove connection: " + (err.message || "Unknown error"));
@@ -489,10 +498,14 @@ export default function ProfilePage({ user }: { user: any }) {
                   <button
                     onClick={handleRemoveConnection}
                     disabled={requestActionLoading}
-                    className="w-full flex items-center justify-center px-6 py-2 bg-white hover:bg-neutral-50 text-neutral-400 hover:text-rose-500 font-bold rounded-xl text-[11px] uppercase tracking-wider transition-all border border-transparent hover:border-rose-100"
+                    className={`w-full flex items-center justify-center px-6 py-2 rounded-xl text-[11px] uppercase tracking-wider font-bold transition-all border ${
+                      confirmDisconnect 
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-600 animate-pulse'
+                        : 'bg-white hover:bg-neutral-50 text-neutral-400 hover:text-rose-500 border-transparent hover:border-rose-100'
+                    }`}
                   >
                     <UserMinus className="w-3.5 h-3.5 mr-1.5" />
-                    {requestActionLoading ? 'Processing...' : 'Remove Connection'}
+                    {requestActionLoading ? 'Processing...' : confirmDisconnect ? 'Click again to confirm' : 'Remove Connection'}
                   </button>
                 </div>
               )}

@@ -203,6 +203,13 @@ function VoiceMessagePlayer({ audioUrl, isMe }: { audioUrl: string; isMe: boolea
   );
 }
 
+function formatMessageTime(timestamp: any) {
+  if (!timestamp) return '';
+  const date = typeof timestamp === 'number' ? new Date(timestamp) : (timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp));
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export default function ChatPage({ user }: { user: any }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -239,6 +246,7 @@ export default function ChatPage({ user }: { user: any }) {
   const [activeHasConnection, setActiveHasConnection] = useState<boolean | null>(null);
   const [activeHasSentRequest, setActiveHasSentRequest] = useState<boolean | null>(null);
   const [activeHasRecvRequest, setActiveHasRecvRequest] = useState<boolean | null>(null);
+  const [confirmDisconnectId, setConfirmDisconnectId] = useState<string | null>(null);
 
   // Synchronize active chat connection status
   useEffect(() => {
@@ -454,7 +462,15 @@ export default function ChatPage({ user }: { user: any }) {
 
   const handleActiveChatRemoveConnection = async () => {
     if (!user?.uid || !activeChat || activeChat === 'global' || activeChat === user.uid || activeChatReqLoading) return;
-    if (!window.confirm("Are you sure you want to disconnect? This deletes mutual messaging history privilege.")) return;
+    
+    if (confirmDisconnectId !== activeChat) {
+      setConfirmDisconnectId(activeChat);
+      setTimeout(() => {
+        setConfirmDisconnectId(prev => prev === activeChat ? null : prev);
+      }, 4000);
+      return;
+    }
+
     setActiveChatReqLoading(true);
     try {
       try {
@@ -476,6 +492,10 @@ export default function ChatPage({ user }: { user: any }) {
       try {
         await remove(ref(rtdb, `chat_requests/${activeChat}/${user.uid}`));
       } catch (e) {}
+
+      // Reset the active viewer and confirmation state
+      setActiveChat('global');
+      setConfirmDisconnectId(null);
     } catch (err: any) {
       console.error("Error removing connection:", err);
       setError("Failed to disconnect.");
@@ -826,6 +846,24 @@ export default function ChatPage({ user }: { user: any }) {
           ...data[key]
         })).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         setMessages(msgs);
+
+        // Update read-receipts: Mark any unseen messages sent by the counterparty as seen
+        if (activeChat !== 'global' && user?.uid) {
+          const updates: Record<string, any> = {};
+          let hasUnseen = false;
+          msgs.forEach((m) => {
+            if (m.authorId !== user.uid && !m.seen) {
+              updates[`${messagesNode}/${m.id}/seen`] = true;
+              hasUnseen = true;
+            }
+          });
+          if (hasUnseen) {
+            update(ref(rtdb), updates).catch((err) => {
+              console.warn("RTDB warning: Could not mark messages as seen:", err);
+            });
+          }
+        }
+
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
@@ -1277,42 +1315,64 @@ export default function ChatPage({ user }: { user: any }) {
                 const isConnected = !!connections[u.uid];
 
                 return (
-                  <button
+                  <div
                     key={u.uid}
                     onClick={() => setActiveChat(u.uid)}
                     id={`chat-item-${u.uid}`}
-                    className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all group ${
+                    className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all group cursor-pointer select-none border border-transparent ${
                       activeChat === u.uid 
                         ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
                         : 'hover:bg-neutral-100 text-neutral-700'
                     }`}
                   >
-                    <div className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-100">
+                    {/* Circle Avatar Option -> Links directly to profile */}
+                    <Link
+                      to={`/profile/${u.uid}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-100 transition-transform active:scale-95 cursor-pointer group/avatar"
+                      title={`View ${u.displayName}'s profile`}
+                    >
                       {u.photoURL ? (
-                        <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" />
+                        <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover group-hover/avatar:opacity-80 transition-all" />
                       ) : (
                         <div className="w-full h-full bg-gradient-to-tr from-indigo-50 to-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-500">
                           {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
                         </div>
                       )}
+                      
+                      {/* Hover Info Overlay */}
+                      <div className="absolute inset-0 bg-neutral-900/60 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center text-white transition-opacity text-[8px] font-bold uppercase tracking-wider">
+                        Profile
+                      </div>
+
                       {isOnline && (
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></span>
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm z-10"></span>
                       )}
-                    </div>
-                    <div className="flex-1 min-w-0">
+                    </Link>
+
+                    <div className="flex-1 min-w-0 pr-1">
                       <div className={`font-bold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-indigo-950' : 'text-neutral-850'}`}>
                         <span className="truncate">{u.displayName}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex items-center gap-1.5 mt-0.5 max-w-full overflow-hidden">
                         <p className="text-xs text-neutral-400 truncate">
                           {isOnline ? 'Online' : 'Offline'}
                         </p>
                         {!isConnected && (
-                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.25 rounded border border-amber-100 font-semibold tracking-tighter">Request needed</span>
+                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.25 rounded border border-amber-100 font-semibold tracking-tighter shrink-0">Request needed</span>
                         )}
                       </div>
                     </div>
-                  </button>
+
+                    {/* Highly responsive layout option link to support all device sizes perfectly */}
+                    <Link
+                      to={`/profile/${u.uid}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 px-2 py-1 text-[10px] font-bold text-neutral-500 hover:text-indigo-600 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 rounded-lg whitespace-nowrap z-10 cursor-pointer shrink-0"
+                    >
+                      Profile
+                    </Link>
+                  </div>
                 );
               })}
             </>
@@ -1379,20 +1439,11 @@ export default function ChatPage({ user }: { user: any }) {
 
           {/* Action Call & Block Toolbar for private chat */}
           {activeChat !== 'global' && activeUserObj && connections[activeChat] && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleInitiateCall}
-                id="call-init-btn"
-                disabled={isSelectedChatBlocked}
-                className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all text-indigo-600 hover:text-indigo-750 cursor-pointer"
-                title="Voice Call"
-              >
-                <Phone className="w-4 h-4" />
-              </button>
+            <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
               <button
                 onClick={() => handleToggleBlock(activeChat)}
                 id="block-toggle-btn"
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold select-none cursor-pointer transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold select-none cursor-pointer transition-all shrink-0 ${
                   isSelectedChatBlocked 
                     ? 'bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-medium' 
                     : 'bg-neutral-50 border border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 transition-all font-medium'
@@ -1400,24 +1451,28 @@ export default function ChatPage({ user }: { user: any }) {
               >
                 {isSelectedChatBlocked ? (
                   <>
-                    <Unlock className="w-3.5 h-3.5" />
-                    Unblock
+                    <Unlock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Unblock</span>
                   </>
                 ) : (
                   <>
-                    <Lock className="w-3.5 h-3.5" />
-                    Block
+                    <Lock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Block</span>
                   </>
                 )}
               </button>
               <button
                 onClick={handleActiveChatRemoveConnection}
                 disabled={activeChatReqLoading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-neutral-50 border border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 font-medium rounded-xl text-xs select-none cursor-pointer transition-all"
-                title="Disconnect Connection"
+                className={`flex items-center gap-1 px-2.5 py-1.5 border font-medium rounded-xl text-xs select-none cursor-pointer transition-all shrink-0 ${
+                  confirmDisconnectId === activeChat 
+                    ? 'bg-rose-600 border-rose-600 text-white hover:bg-rose-700 animate-pulse font-semibold'
+                    : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100'
+                }`}
+                title={confirmDisconnectId === activeChat ? "Confirm Disconnect" : "Disconnect Connection"}
               >
-                <UserMinus className="w-3.5 h-3.5" />
-                Disconnect
+                <UserMinus className="w-3.5 h-3.5 shrink-0" />
+                <span>{confirmDisconnectId === activeChat ? 'Confirm Disconnect?' : 'Disconnect'}</span>
               </button>
             </div>
           )}
@@ -1694,6 +1749,27 @@ export default function ChatPage({ user }: { user: any }) {
                           })}
                         </div>
                       )}
+
+                      {/* Message Meta Info (time and seen status) */}
+                      <div className={`flex items-center gap-1.5 mt-1 text-[10px] text-neutral-400 select-none ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        <span>{formatMessageTime(msg.timestamp)}</span>
+                        {isMe && activeChat !== 'global' && (
+                          <span className="flex items-center gap-0.5">
+                            •
+                            {msg.seen ? (
+                              <span className="text-indigo-600 font-semibold flex items-center gap-0.5">
+                                Seen
+                                <span className="text-[11px] font-bold">✓✓</span>
+                              </span>
+                            ) : (
+                              <span className="text-neutral-400 flex items-center gap-0.5">
+                                Sent
+                                <span className="text-[11px]">✓</span>
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
