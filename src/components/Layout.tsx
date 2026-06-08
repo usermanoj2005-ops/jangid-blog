@@ -63,7 +63,7 @@ export default function Layout({ children, user }: { children: ReactNode, user: 
       {/* Main Container Wrapper */}
       <main className={`flex-1 w-full mx-auto ${
         isChatPage 
-          ? 'p-0 pb-16 md:pb-0 max-w-none md:max-w-5xl md:px-8 md:py-8 flex flex-col min-h-0 overflow-hidden md:block md:overflow-visible' 
+          ? 'p-0 pb-16 md:pb-0 max-w-none md:max-w-6xl md:px-8 md:py-8 flex flex-col min-h-0 overflow-hidden md:block md:overflow-visible' 
           : 'pb-16 md:pb-0 max-w-5xl px-4 md:px-8 py-4 md:py-8 pb-20'
       }`}>
         {children}

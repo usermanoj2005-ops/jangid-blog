@@ -322,6 +322,7 @@ export default function ChatPage({ user }: { user: any }) {
   };
   const [usersInfo, setUsersInfo] = useState<any[]>([]);
   const [userSearchText, setUserSearchText] = useState('');
+  const [newUserSearchText, setNewUserSearchText] = useState('');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
 
   // Connection and Request states
@@ -1288,25 +1289,39 @@ export default function ChatPage({ user }: { user: any }) {
     });
   }, [activeEmojiTab, emojiSearch]);
 
-  // Direct conversations lists (all except blocked vs simple search)
-  const filteredUsers = useMemo(() => {
-    return usersInfo.filter(u => {
+  // Connected (Accepted) Writers List, filtered by userSearchText (connections search bar)
+  const connectedUsersSorted = useMemo(() => {
+    const list = usersInfo.filter(u => {
+      const isConnected = !!connections[u.uid];
+      if (!isConnected) return false;
       const textMatch = !userSearchText.trim() || u.displayName.toLowerCase().includes(userSearchText.toLowerCase());
-      // Show everyone or matched with search
       return textMatch;
     });
-  }, [usersInfo, userSearchText]);
-
-  // Sort: online users first, then everyone else
-  const sortedUsers = useMemo(() => {
-    return [...filteredUsers].sort((a, b) => {
+    return [...list].sort((a, b) => {
       const aOnline = isUserOnline(a.lastSeen);
       const bOnline = isUserOnline(b.lastSeen);
       if (aOnline && !bOnline) return -1;
       if (!aOnline && bOnline) return 1;
       return a.displayName.localeCompare(b.displayName);
     });
-  }, [filteredUsers]);
+  }, [usersInfo, connections, userSearchText]);
+
+  // New (Not Accepted/Not Connected) Writers List, filtered by newUserSearchText (new users search bar)
+  const newUsersSorted = useMemo(() => {
+    const list = usersInfo.filter(u => {
+      const isConnected = !!connections[u.uid];
+      if (isConnected) return false;
+      const textMatch = !newUserSearchText.trim() || u.displayName.toLowerCase().includes(newUserSearchText.toLowerCase());
+      return textMatch;
+    });
+    return [...list].sort((a, b) => {
+      const aOnline = isUserOnline(a.lastSeen);
+      const bOnline = isUserOnline(b.lastSeen);
+      if (aOnline && !bOnline) return -1;
+      if (!aOnline && bOnline) return 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+  }, [usersInfo, connections, newUserSearchText]);
 
   const activeUserObj = usersInfo.find(u => u.uid === activeChat);
   const isSelectedChatBlocked = activeChat !== 'global' && !!blockedUsers[activeChat];
@@ -1536,82 +1551,185 @@ export default function ChatPage({ user }: { user: any }) {
                 })
               )}
 
-              {/* Divider */}
-              <div className="px-3 pt-4 pb-1 flex items-center justify-between border-t border-neutral-200/40 mt-3 select-none">
-                <h3 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Writers</h3>
+              {/* Divider for Connections */}
+              <div className="px-3 pt-4 pb-1.5 flex items-center justify-between border-t border-neutral-200/40 mt-3 select-none">
+                <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest flex items-center">
+                  <UserCheck className="w-3.5 h-3.5 mr-1 text-slate-500" />
+                  My Connections ({connectedUsersSorted.length})
+                </h3>
               </div>
-              
-              {sortedUsers.map((u) => {
-                const isOnline = isUserOnline(u.lastSeen);
-                const isConnected = !!connections[u.uid];
 
-                return (
-                  <div
-                    key={u.uid}
-                    onClick={() => setActiveChat(u.uid)}
-                    id={`chat-item-${u.uid}`}
-                    className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all group cursor-pointer select-none border border-transparent ${
-                      activeChat === u.uid 
-                        ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
-                        : 'hover:bg-neutral-100 text-neutral-700'
-                    }`}
-                  >
-                    {/* Circle Avatar Option -> Links directly to profile */}
-                    <Link
-                      to={`/profile/${u.uid}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-100 transition-transform active:scale-95 cursor-pointer group/avatar"
-                      title={`View ${u.displayName}'s profile`}
+              {connectedUsersSorted.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-neutral-450 font-medium text-center bg-neutral-100/30 rounded-xl mx-2 border border-dashed border-neutral-200 select-none">
+                  {userSearchText.trim() ? "No matching connections found." : "No accepted connections yet."}
+                </div>
+              ) : (
+                connectedUsersSorted.map((u) => {
+                  const isOnline = isUserOnline(u.lastSeen);
+                  return (
+                    <div
+                      key={u.uid}
+                      onClick={() => setActiveChat(u.uid)}
+                      id={`chat-item-connected-${u.uid}`}
+                      className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all group cursor-pointer select-none border border-transparent ${
+                        activeChat === u.uid 
+                          ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
+                          : 'hover:bg-neutral-100 text-neutral-700'
+                      }`}
                     >
-                      {u.photoURL ? (
-                        <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover group-hover/avatar:opacity-80 transition-all" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-tr from-indigo-50 to-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-500">
-                          {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
-                        </div>
-                      )}
-                      
-                      {/* Hover Info Overlay */}
-                      <div className="absolute inset-0 bg-neutral-900/60 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center text-white transition-opacity text-[8px] font-bold uppercase tracking-wider">
-                        Profile
-                      </div>
-
-                      {isOnline && (
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm z-10"></span>
-                      )}
-                    </Link>
-
-                    <div className="flex-1 min-w-0 pr-1">
-                      <div className={`font-bold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-indigo-950' : 'text-neutral-850'}`}>
-                        <span className="truncate">{u.displayName}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 max-w-full overflow-hidden">
-                        <p className="text-xs text-neutral-400 truncate">
-                          {isOnline ? 'Online' : 'Offline'}
-                        </p>
-                        {!isConnected && (
-                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.25 rounded border border-amber-100 font-semibold tracking-tighter shrink-0">Request needed</span>
+                      {/* Circle Avatar Option -> Links directly to profile */}
+                      <Link
+                        to={`/profile/${u.uid}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-100 transition-transform active:scale-95 cursor-pointer group/avatar"
+                        title={`View ${u.displayName}'s profile`}
+                      >
+                        {u.photoURL ? (
+                          <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover group-hover/avatar:opacity-80 transition-all" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-tr from-indigo-50 to-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-500">
+                            {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
+                          </div>
                         )}
-                      </div>
-                    </div>
+                        
+                        {/* Hover Info Overlay */}
+                        <div className="absolute inset-0 bg-neutral-900/60 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center text-white transition-opacity text-[8px] font-bold uppercase tracking-wider">
+                          Profile
+                        </div>
 
-                    {/* Highly responsive layout option link to support all device sizes perfectly */}
-                    <Link
-                      to={`/profile/${u.uid}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 px-2 py-1 text-[10px] font-bold text-neutral-500 hover:text-indigo-600 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 rounded-lg whitespace-nowrap z-10 cursor-pointer shrink-0"
+                        {isOnline && (
+                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm z-10"></span>
+                        )}
+                      </Link>
+
+                      <div className="flex-1 min-w-0 pr-1">
+                        <div className={`font-bold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-indigo-950' : 'text-neutral-850'}`}>
+                          <span className="truncate">{u.displayName}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 max-w-full overflow-hidden">
+                          <p className="text-xs text-neutral-400 truncate">
+                            {isOnline ? 'Online' : 'Offline'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Highly responsive layout option link to support all device sizes perfectly */}
+                      <Link
+                        to={`/profile/${u.uid}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 px-2 py-1 text-[10px] font-bold text-neutral-500 hover:text-indigo-600 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 rounded-lg whitespace-nowrap z-10 cursor-pointer shrink-0"
+                      >
+                        Profile
+                      </Link>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Divider for Discover New Users */}
+              <div className="px-3 pt-5 pb-1 flex flex-col gap-2 border-t border-neutral-200/40 mt-4 select-none">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[10px] font-bold text-amber-600 uppercase tracking-widest flex items-center">
+                    <UserPlus className="w-3.5 h-3.5 mr-1" />
+                    Discover New Writers
+                  </h3>
+                  <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
+                    {newUsersSorted.length} available
+                  </span>
+                </div>
+                
+                {/* Search Bar inside Discover New Users section */}
+                <div className="relative mt-1">
+                  <Search className="w-3.5 h-3.5 text-neutral-450 absolute left-2.5 top-2" />
+                  <input
+                    type="text"
+                    id="discover-user-search-input"
+                    value={newUserSearchText}
+                    onChange={(e) => setNewUserSearchText(e.target.value)}
+                    placeholder="Search new writers to connect..."
+                    className="w-full bg-white text-xs py-1.5 pl-8 pr-7 rounded-lg border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 text-neutral-900 placeholder-neutral-400 font-medium"
+                  />
+                  {newUserSearchText && (
+                    <button onClick={() => setNewUserSearchText('')} className="absolute right-2 top-2.5 text-neutral-400 hover:text-neutral-950">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {newUsersSorted.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-neutral-450 font-medium text-center bg-neutral-100/30 rounded-xl mx-2 border border-dashed border-neutral-200 select-none">
+                  {newUserSearchText.trim() ? "No matching new writers found." : "No new writers available to connect."}
+                </div>
+              ) : (
+                newUsersSorted.map((u) => {
+                  const isOnline = isUserOnline(u.lastSeen);
+                  return (
+                    <div
+                      key={u.uid}
+                      onClick={() => setActiveChat(u.uid)}
+                      id={`chat-item-new-${u.uid}`}
+                      className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all group cursor-pointer select-none border border-transparent ${
+                        activeChat === u.uid 
+                          ? 'bg-amber-50/50 text-amber-950 border border-amber-200/40' 
+                          : 'hover:bg-neutral-100 text-neutral-700'
+                      }`}
                     >
-                      Profile
-                    </Link>
-                  </div>
-                );
-              })}
+                      {/* Circle Avatar Option -> Links directly to profile */}
+                      <Link
+                        to={`/profile/${u.uid}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-100 transition-transform active:scale-95 cursor-pointer group/avatar"
+                        title={`View ${u.displayName}'s profile`}
+                      >
+                        {u.photoURL ? (
+                          <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover group-hover/avatar:opacity-80 transition-all" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-tr from-amber-50 to-amber-100 flex items-center justify-center text-sm font-bold text-amber-600">
+                            {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
+                          </div>
+                        )}
+                        
+                        {/* Hover Info Overlay */}
+                        <div className="absolute inset-0 bg-neutral-900/60 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center text-white transition-opacity text-[8px] font-bold uppercase tracking-wider">
+                          Profile
+                        </div>
+
+                        {isOnline && (
+                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm z-10"></span>
+                        )}
+                      </Link>
+
+                      <div className="flex-1 min-w-0 pr-1">
+                        <div className={`font-bold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-amber-950' : 'text-neutral-850'}`}>
+                          <span className="truncate">{u.displayName}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 max-w-full overflow-hidden">
+                          <p className="text-xs text-neutral-450 truncate">
+                            {isOnline ? 'Online' : 'Offline'}
+                          </p>
+                          <span className="text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.25 rounded border border-amber-100 font-semibold tracking-tighter shrink-0 select-none">Request needed</span>
+                        </div>
+                      </div>
+
+                      {/* Highly responsive layout option link to support all device sizes perfectly */}
+                      <Link
+                        to={`/profile/${u.uid}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 px-2 py-1 text-[10px] font-bold text-neutral-500 hover:text-indigo-600 hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 rounded-lg whitespace-nowrap z-10 cursor-pointer shrink-0"
+                      >
+                        Profile
+                      </Link>
+                    </div>
+                  );
+                })
+              )}
             </>
           )}
         </div>
           
-          {sortedUsers.length === 0 && (
-            <div className="px-3 py-6 text-xs text-neutral-500 text-center">
+          {connectedUsersSorted.length === 0 && newUsersSorted.length === 0 && (
+            <div className="px-3 py-6 text-xs text-neutral-500 text-center select-none">
               No matching writers found.
             </div>
           )}
@@ -1650,11 +1768,11 @@ export default function ChatPage({ user }: { user: any }) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900 truncate">
+              <h1 id="active-chat-title" className="text-sm xs:text-base md:text-lg font-serif font-bold text-neutral-900 truncate max-w-[130px] xs:max-w-[200px] sm:max-w-md">
                 {groups.some(g => g.id === activeChat) ? (groups.find(g => g.id === activeChat)?.name) : activeChat === 'global' ? 'Community Chat' : `${activeUserObj?.displayName || 'Chat'}`}
               </h1>
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-neutral-500 truncate max-w-[180px] sm:max-w-md select-none">
+              <div className="flex items-center gap-1.5">
+                <div className="text-[10px] xs:text-xs text-neutral-500 truncate max-w-[100px] xs:max-w-[150px] sm:max-w-md select-none">
                   {groups.some(g => g.id === activeChat) ? (
                     (() => {
                       const grp = groups.find(g => g.id === activeChat);
@@ -1673,43 +1791,44 @@ export default function ChatPage({ user }: { user: any }) {
                 {!groups.some(g => g.id === activeChat) && activeChat !== 'global' && activeChat && (
                   <Link 
                     to={`/profile/${activeChat}`}
-                    className="text-[10px] bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full font-bold hover:bg-neutral-200 transition-colors shrink-0"
+                    className="text-[9px] xs:text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-full font-bold hover:bg-neutral-200 transition-colors shrink-0"
                   >
-                    View Profile
+                    Profile
                   </Link>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Action Call & Block Toolbar for private chat */}
+          {/* Action Call & Block Toolbar for private chat - PERFECTLY MOBILE & LAPTOP RESPONSIVE */}
           {activeChat !== 'global' && !groups.some(g => g.id === activeChat) && activeUserObj && connections[activeChat] && (
             <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
               <button
                 onClick={() => handleToggleBlock(activeChat)}
                 id="block-toggle-btn"
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold select-none cursor-pointer transition-all shrink-0 ${
+                className={`flex items-center gap-1 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold select-none cursor-pointer transition-all shrink-0 ${
                   isSelectedChatBlocked 
                     ? 'bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-medium' 
                     : 'bg-neutral-50 border border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 transition-all font-medium'
                 }`}
+                title={isSelectedChatBlocked ? "Unblock Writer" : "Block Writer"}
               >
                 {isSelectedChatBlocked ? (
                   <>
                     <Unlock className="w-3.5 h-3.5 shrink-0" />
-                    <span>Unblock</span>
+                    <span className="hidden sm:inline">Unblock</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-3.5 h-3.5 shrink-0" />
-                    <span>Block</span>
+                    <span className="hidden sm:inline">Block</span>
                   </>
                 )}
               </button>
               <button
                 onClick={handleActiveChatRemoveConnection}
                 disabled={activeChatReqLoading}
-                className={`flex items-center gap-1 px-2.5 py-1.5 border font-medium rounded-xl text-xs select-none cursor-pointer transition-all shrink-0 ${
+                className={`flex items-center gap-1 p-2 sm:px-2.5 sm:py-1.5 border font-medium rounded-xl text-xs select-none cursor-pointer transition-all shrink-0 ${
                   confirmDisconnectId === activeChat 
                     ? 'bg-rose-600 border-rose-600 text-white hover:bg-rose-700 animate-pulse font-semibold'
                     : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100'
@@ -1717,7 +1836,11 @@ export default function ChatPage({ user }: { user: any }) {
                 title={confirmDisconnectId === activeChat ? "Confirm Disconnect" : "Disconnect Connection"}
               >
                 <UserMinus className="w-3.5 h-3.5 shrink-0" />
-                <span>{confirmDisconnectId === activeChat ? 'Confirm Disconnect?' : 'Disconnect'}</span>
+                {confirmDisconnectId === activeChat ? (
+                  <span className="text-white text-[10px] font-bold">Confirm?</span>
+                ) : (
+                  <span className="hidden sm:inline">Disconnect</span>
+                )}
               </button>
             </div>
           )}
@@ -2270,7 +2393,7 @@ export default function ChatPage({ user }: { user: any }) {
                             ? "Write message to global channel... (Press Enter to send)" 
                             : `Write direct message to ${activeUserObj?.displayName || 'Author'}...`
                       }
-                      className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px]"
+                      className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px] overflow-y-auto scrollbar-none"
                       rows={1}
                     />
 
