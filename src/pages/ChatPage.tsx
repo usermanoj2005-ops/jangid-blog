@@ -1205,7 +1205,7 @@ export default function ChatPage({ user }: { user: any }) {
   const isSelectedChatBlocked = activeChat !== 'global' && !!blockedUsers[activeChat];
 
   return (
-    <div id="unified-chat-root" className="w-full max-w-6xl mx-auto h-[calc(100vh-124px)] md:h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-none md:rounded-3xl md:shadow-2xl md:border md:border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans">
+    <div id="unified-chat-root" className="w-full max-w-6xl mx-auto h-full md:h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-none md:rounded-3xl md:shadow-2xl md:border md:border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans animate-fade-in">
       
       {/* 📞 INCOMING CALL OVERLAY PANEL */}
       {incomingCall && !callActive && (
