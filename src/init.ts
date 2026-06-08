@@ -32,23 +32,43 @@ if (typeof window !== 'undefined') {
   }
 
   // 2. Globally suppress the specific "only a getter" TypeError to prevent app breakage
-  const isFetchGetterError = (msg: string) => 
-    msg && (msg.includes('fetch') && (msg.includes('getter') || msg.includes('read only')));
+  const isFetchGetterError = (msg: string) => {
+    const s = String(msg).toLowerCase();
+    return s.includes('fetch') && (
+      s.includes('getter') || 
+      s.includes('read only') || 
+      s.includes('assignment to constant') || 
+      s.includes('cannot set property') ||
+      s.includes('only a getter')
+    );
+  };
 
-  window.addEventListener('error', (e) => {
-    if (isFetchGetterError(e.message || '')) {
+  const blockError = (e: any) => {
+    const msg = e.message || (e.reason && e.reason.message) || String(e || '');
+    if (isFetchGetterError(msg)) {
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      if (e.preventDefault) e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      return true;
+    }
+    return false;
+  };
+
+  window.addEventListener('error', blockError, true);
+  window.addEventListener('unhandledrejection', (e) => {
+    if (blockError(e)) {
       e.preventDefault();
       e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     }
   }, true);
 
-  window.addEventListener('unhandledrejection', (e) => {
-    const reason = e.reason?.message || String(e.reason || '');
-    if (isFetchGetterError(reason)) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  });
+  // Fallback for older browsers or specific sandbox error reporting
+  const prevOnError = window.onerror;
+  window.onerror = function(msg: any) {
+    if (isFetchGetterError(String(msg))) return true;
+    if (prevOnError) return prevOnError.apply(this, arguments as any);
+  };
 
   // 3. Prevent JSON.parse("undefined") SyntaxErrors which can occur in some storage edge cases
   try {

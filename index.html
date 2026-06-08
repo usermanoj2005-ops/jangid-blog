@@ -4,6 +4,66 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jangid Blog | Welcome</title>
+    <script>
+      (function() {
+        // Redefine window.fetch if possible
+        var currentFetch = window.fetch;
+        var defineFetch = function(obj) {
+          try {
+            var desc = Object.getOwnPropertyDescriptor(obj, 'fetch');
+            if (!desc || desc.configurable) {
+              Object.defineProperty(obj, 'fetch', {
+                get: function() { return currentFetch; },
+                set: function(v) { currentFetch = v; },
+                configurable: true,
+                enumerable: true
+              });
+            }
+          } catch(e) {}
+        };
+        defineFetch(window);
+        defineFetch(Window.prototype);
+        if (typeof globalThis !== 'undefined') defineFetch(globalThis);
+
+        // Global suppressed handler
+        var isFetchGetterError = function(msg) {
+          var s = String(msg).toLowerCase();
+          return s.includes('fetch') && (
+            s.includes('getter') || 
+            s.includes('read only') || 
+            s.includes('assignment to constant') || 
+            s.includes('cannot set property') ||
+            s.includes('only a getter')
+          );
+        };
+
+        var blockError = function(e) {
+          var msg = e.message || (e.reason && e.reason.message) || String(e || '');
+          if (isFetchGetterError(msg)) {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            return true;
+          }
+          return false;
+        };
+
+        window.addEventListener('error', blockError, true);
+        window.addEventListener('unhandledrejection', function(e) {
+          if (blockError(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+
+        var prevOnError = window.onerror;
+        window.onerror = function(msg) {
+          if (isFetchGetterError(String(msg))) return true;
+          if (prevOnError) return prevOnError.apply(this, arguments);
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

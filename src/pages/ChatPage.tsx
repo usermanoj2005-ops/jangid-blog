@@ -16,6 +16,8 @@ import {
   Users, 
   User, 
   UserPlus,
+  UserMinus,
+  Clock,
   MessagesSquare, 
   MessageSquare,
   Phone, 
@@ -231,6 +233,76 @@ export default function ChatPage({ user }: { user: any }) {
   const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
   const [requestTab, setRequestTab] = useState<'chats' | 'requests'>('chats');
 
+  // Active chat connection status states
+  const [activeChatConnStatus, setActiveChatConnStatus] = useState<'none' | 'pending' | 'accepted' | 'received'>('none');
+  const [activeChatReqLoading, setActiveChatReqLoading] = useState(false);
+  const [activeHasConnection, setActiveHasConnection] = useState<boolean | null>(null);
+  const [activeHasSentRequest, setActiveHasSentRequest] = useState<boolean | null>(null);
+  const [activeHasRecvRequest, setActiveHasRecvRequest] = useState<boolean | null>(null);
+
+  // Synchronize active chat connection status
+  useEffect(() => {
+    if (!activeChat || activeChat === 'global' || activeChat === user?.uid || !user?.uid) {
+      setActiveChatConnStatus('none');
+      setActiveHasConnection(false);
+      setActiveHasSentRequest(false);
+      setActiveHasRecvRequest(false);
+      return;
+    }
+
+    const connsRef = ref(rtdb, `connections/${user.uid}/${activeChat}`);
+    const sentReqRef = ref(rtdb, `chat_requests/${activeChat}/${user.uid}`);
+    const recvReqRef = ref(rtdb, `chat_requests/${user.uid}/${activeChat}`);
+
+    const u1 = onValue(connsRef, (snap) => {
+      setActiveHasConnection(snap.exists());
+    }, (err) => {
+      console.warn("RTDB warning: activeChat connection read failed:", err);
+      setActiveHasConnection(false);
+    });
+
+    const u2 = onValue(sentReqRef, (snap) => {
+      setActiveHasSentRequest(snap.exists());
+    }, (err) => {
+      console.warn("RTDB warning: activeChat sent request read failed:", err);
+      setActiveHasSentRequest(false);
+    });
+
+    const u3 = onValue(recvReqRef, (snap) => {
+      setActiveHasRecvRequest(snap.exists());
+    }, (err) => {
+      console.warn("RTDB warning: activeChat received request read failed:", err);
+      setActiveHasRecvRequest(false);
+    });
+
+    return () => {
+      u1();
+      u2();
+      u3();
+    };
+  }, [activeChat, user?.uid]);
+
+  // Consolidate live states safely
+  useEffect(() => {
+    if (!activeChat || activeChat === 'global' || activeChat === user?.uid) {
+      setActiveChatConnStatus('none');
+      return;
+    }
+    if (activeHasConnection === null || activeHasSentRequest === null || activeHasRecvRequest === null) {
+      return;
+    }
+
+    if (activeHasConnection) {
+      setActiveChatConnStatus('accepted');
+    } else if (activeHasSentRequest) {
+      setActiveChatConnStatus('pending');
+    } else if (activeHasRecvRequest) {
+      setActiveChatConnStatus('received');
+    } else {
+      setActiveChatConnStatus('none');
+    }
+  }, [activeHasConnection, activeHasSentRequest, activeHasRecvRequest, activeChat, user?.uid]);
+
   // Switch to chat view automatically when activeChat changes on mobile
   useEffect(() => {
     if (activeChat) {
@@ -286,6 +358,129 @@ export default function ChatPage({ user }: { user: any }) {
       await remove(ref(rtdb, `chat_requests/${user.uid}/${senderId}`));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleActiveChatSendRequest = async () => {
+    if (!user?.uid || !activeChat || activeChat === 'global' || activeChat === user.uid || activeChatReqLoading) return;
+    setActiveChatReqLoading(true);
+    try {
+      // Automatic Mutual Accept: If they already sent us a request, trying to "Add" them should just accept.
+      if (activeChatConnStatus === 'received') {
+        try {
+          const updates: any = {};
+          updates[`connections/${user.uid}/${activeChat}`] = true;
+          updates[`connections/${activeChat}/${user.uid}`] = true;
+          updates[`chat_requests/${user.uid}/${activeChat}`] = null;
+          await update(ref(rtdb), updates);
+        } catch (atomicErr) {
+          console.warn("Atomic send-accept failed, fallback with set:", atomicErr);
+          await set(ref(rtdb, `connections/${user.uid}/${activeChat}`), true);
+          try {
+            await set(ref(rtdb, `connections/${activeChat}/${user.uid}`), true);
+          } catch (e) {}
+          await remove(ref(rtdb, `chat_requests/${user.uid}/${activeChat}`));
+        }
+        return;
+      }
+
+      await set(ref(rtdb, `chat_requests/${activeChat}/${user.uid}`), {
+        senderId: user.uid,
+        senderName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+        senderPhoto: user.photoURL || '',
+        timestamp: rtdbServerTimestamp()
+      });
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setActiveChatReqLoading(false);
+    }
+  };
+
+  const handleActiveChatCancelRequest = async () => {
+    if (!user?.uid || !activeChat || activeChat === 'global' || activeChat === user.uid || activeChatReqLoading) return;
+    setActiveChatReqLoading(true);
+    try {
+      await remove(ref(rtdb, `chat_requests/${activeChat}/${user.uid}`));
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setActiveChatReqLoading(false);
+    }
+  };
+
+  const handleActiveChatAcceptRequest = async () => {
+    if (!user?.uid || !activeChat || activeChat === 'global' || activeChat === user.uid || activeChatReqLoading) return;
+    setActiveChatReqLoading(true);
+    try {
+      try {
+        const updates: any = {};
+        updates[`connections/${user.uid}/${activeChat}`] = true;
+        updates[`connections/${activeChat}/${user.uid}`] = true;
+        updates[`chat_requests/${user.uid}/${activeChat}`] = null;
+        await update(ref(rtdb), updates);
+      } catch (atomicErr) {
+        console.warn("Atomic accept failed, fallback with set:", atomicErr);
+        await set(ref(rtdb, `connections/${user.uid}/${activeChat}`), true);
+        try {
+          await set(ref(rtdb, `connections/${activeChat}/${user.uid}`), true);
+        } catch (otherErr) {
+          console.warn("Could not write target connection:", otherErr);
+        }
+        await remove(ref(rtdb, `chat_requests/${user.uid}/${activeChat}`));
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setActiveChatReqLoading(false);
+    }
+  };
+
+  const handleActiveChatDeclineRequest = async () => {
+    if (!user?.uid || !activeChat || activeChat === 'global' || activeChat === user.uid || activeChatReqLoading) return;
+    setActiveChatReqLoading(true);
+    try {
+      await remove(ref(rtdb, `chat_requests/${user.uid}/${activeChat}`));
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setActiveChatReqLoading(false);
+    }
+  };
+
+  const handleActiveChatRemoveConnection = async () => {
+    if (!user?.uid || !activeChat || activeChat === 'global' || activeChat === user.uid || activeChatReqLoading) return;
+    if (!window.confirm("Are you sure you want to disconnect? This deletes mutual messaging history privilege.")) return;
+    setActiveChatReqLoading(true);
+    try {
+      try {
+        const updates: any = {};
+        updates[`connections/${user.uid}/${activeChat}`] = null;
+        updates[`connections/${activeChat}/${user.uid}`] = null;
+        await update(ref(rtdb), updates);
+      } catch (atomicErr) {
+        console.warn("Atomic removal failed, try individual nodes:", atomicErr);
+        await remove(ref(rtdb, `connections/${user.uid}/${activeChat}`));
+        try {
+          await remove(ref(rtdb, `connections/${activeChat}/${user.uid}`));
+        } catch (e) {}
+      }
+
+      try {
+        await remove(ref(rtdb, `chat_requests/${user.uid}/${activeChat}`));
+      } catch (e) {}
+      try {
+        await remove(ref(rtdb, `chat_requests/${activeChat}/${user.uid}`));
+      } catch (e) {}
+    } catch (err: any) {
+      console.error("Error removing connection:", err);
+      setError("Failed to disconnect.");
+    } finally {
+      setActiveChatReqLoading(false);
     }
   };
 
@@ -655,6 +850,11 @@ export default function ChatPage({ user }: { user: any }) {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
+    if (activeChat !== 'global' && !connections[activeChat]) {
+      setError("Cannot send message. You must be connected with this author to send messages.");
+      return;
+    }
+
     let messagesNode = 'messages';
     if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
@@ -765,6 +965,12 @@ export default function ChatPage({ user }: { user: any }) {
 
   const sendVoiceMessage = async (base64Audio: string) => {
     if (!base64Audio) return;
+
+    if (activeChat !== 'global' && !connections[activeChat]) {
+      setError("Cannot send voice message. You must be connected with this author to send messages.");
+      return;
+    }
+
     let messagesNode = 'messages';
     if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
@@ -1204,6 +1410,15 @@ export default function ChatPage({ user }: { user: any }) {
                   </>
                 )}
               </button>
+              <button
+                onClick={handleActiveChatRemoveConnection}
+                disabled={activeChatReqLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-neutral-50 border border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 font-medium rounded-xl text-xs select-none cursor-pointer transition-all"
+                title="Disconnect Connection"
+              >
+                <UserMinus className="w-3.5 h-3.5" />
+                Disconnect
+              </button>
             </div>
           )}
         </div>
@@ -1286,17 +1501,78 @@ export default function ChatPage({ user }: { user: any }) {
           {activeChat !== 'global' && !connections[activeChat] ? (
             <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
               <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6 border border-amber-100">
-                <Lock className="w-10 h-10 text-amber-500" />
+                {activeChatConnStatus === 'pending' ? (
+                  <Clock className="w-10 h-10 text-amber-500 animate-pulse" />
+                ) : activeChatConnStatus === 'received' ? (
+                  <UserPlus className="w-10 h-10 text-indigo-500" />
+                ) : (
+                  <Lock className="w-10 h-10 text-amber-500" />
+                )}
               </div>
-              <h3 className="text-xl font-bold text-neutral-900 mb-2 font-serif">Connection Required</h3>
-              <p className="text-sm text-neutral-500 max-w-xs mb-8 leading-relaxed">
-                Private messaging is only available between authors who have connected. Start by viewing their profile and sending a request.
+              
+              <h3 className="text-xl font-bold text-neutral-900 mb-2 font-serif">
+                {activeChatConnStatus === 'pending' && "Connection Request Sent"}
+                {activeChatConnStatus === 'received' && "Connection Request Received"}
+                {activeChatConnStatus === 'none' && "Connection Required"}
+              </h3>
+              
+              <p className="text-sm text-neutral-500 max-w-sm mb-8 leading-relaxed">
+                {activeChatConnStatus === 'pending' && "Your request is currently pending. Private direct messaging will be unlocked once this author accepts."}
+                {activeChatConnStatus === 'received' && `${activeUserObj?.displayName || 'This author'} sent you a connection request. Accept to start direct messages immediately.`}
+                {activeChatConnStatus === 'none' && "Private direct messaging is only available between connected authors. Send a request to start talking!"}
               </p>
+
+              {/* Inline Action Controls */}
+              <div className="w-full max-w-xs space-y-3 mb-6">
+                {activeChatConnStatus === 'none' && (
+                  <button
+                    onClick={handleActiveChatSendRequest}
+                    disabled={activeChatReqLoading}
+                    className="w-full flex items-center justify-center px-6 py-3 bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-400 text-white font-bold rounded-xl text-sm transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    {activeChatReqLoading ? 'Sending...' : 'Send Connection Request'}
+                  </button>
+                )}
+
+                {activeChatConnStatus === 'pending' && (
+                  <button
+                    onClick={handleActiveChatCancelRequest}
+                    disabled={activeChatReqLoading}
+                    className="w-full flex items-center justify-center px-6 py-3 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 font-bold rounded-xl text-sm border border-rose-100 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Clock className="w-4 h-4 mr-2" />
+                    {activeChatReqLoading ? 'Cancelling...' : 'Cancel Sent Request'}
+                  </button>
+                )}
+
+                {activeChatConnStatus === 'received' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={handleActiveChatAcceptRequest}
+                      disabled={activeChatReqLoading}
+                      className="flex items-center justify-center px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-indigo-100 active:scale-95 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4 mr-1.5" />
+                      {activeChatReqLoading ? '...' : 'Accept'}
+                    </button>
+                    <button
+                      onClick={handleActiveChatDeclineRequest}
+                      disabled={activeChatReqLoading}
+                      className="flex items-center justify-center px-4 py-3 bg-white hover:bg-neutral-50 disabled:bg-neutral-100 disabled:text-neutral-400 text-neutral-650 font-bold rounded-xl text-sm border border-neutral-200 transition-all active:scale-95 cursor-pointer"
+                    >
+                      <X className="w-4 h-4 mr-1.5" />
+                      {activeChatReqLoading ? '...' : 'Decline'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <Link 
                 to={`/profile/${activeChat}`}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-neutral-900 text-white rounded-xl text-sm font-bold shadow-lg shadow-neutral-200 hover:bg-neutral-800 transition-all active:scale-95"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline transition-all"
               >
-                Go to Profile
+                View writer's full profile
               </Link>
             </div>
           ) : loading ? (

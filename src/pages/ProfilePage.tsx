@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { LogOut, User, Edit2, Trash2, FileText, Check, X, Calendar, UserPlus, MessageSquare, Clock } from 'lucide-react';
+import { LogOut, User, Edit2, Trash2, FileText, Check, X, Calendar, UserPlus, MessageSquare, Clock, UserMinus } from 'lucide-react';
 import { auth, db, rtdb } from '../lib/firebase';
 import { signOut, updateProfile } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, deleteDoc } from 'firebase/firestore';
@@ -27,15 +27,78 @@ export default function ProfilePage({ user }: { user: any }) {
   // Connection states
   const [connectionStatus, setConnectionStatus] = useState<'none' | 'pending' | 'accepted' | 'received'>('none');
   const [requestActionLoading, setRequestActionLoading] = useState(false);
+  const [hasConnection, setHasConnection] = useState<boolean | null>(null);
+  const [hasSentRequest, setHasSentRequest] = useState<boolean | null>(null);
+  const [hasRecvRequest, setHasRecvRequest] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (targetUid) {
       fetchProfileData();
-      if (!isMe) {
-        checkConnectionStatus();
-      }
     }
-  }, [targetUid, isMe]);
+  }, [targetUid]);
+
+  // Integrated connection status logic with proper cleanups
+  useEffect(() => {
+    if (!targetUid || isMe || !user?.uid) {
+      setConnectionStatus('none');
+      setHasConnection(false);
+      setHasSentRequest(false);
+      setHasRecvRequest(false);
+      return;
+    }
+
+    const connsRef = dbRef(rtdb, `connections/${user.uid}/${targetUid}`);
+    const sentReqRef = dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`);
+    const recvReqRef = dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`);
+
+    const u1 = onValue(connsRef, (snap) => {
+      setHasConnection(snap.exists());
+    }, (err) => {
+      console.warn("Telemetry warning: connection read failed:", err);
+      setHasConnection(false);
+    });
+
+    const u2 = onValue(sentReqRef, (snap) => {
+      setHasSentRequest(snap.exists());
+    }, (err) => {
+      console.warn("Telemetry warning: sent request read failed:", err);
+      setHasSentRequest(false);
+    });
+
+    const u3 = onValue(recvReqRef, (snap) => {
+      setHasRecvRequest(snap.exists());
+    }, (err) => {
+      console.warn("Telemetry warning: received request read failed:", err);
+      setHasRecvRequest(false);
+    });
+
+    return () => {
+      u1();
+      u2();
+      u3();
+    };
+  }, [targetUid, isMe, user?.uid]);
+
+  // Consolidate live states safely
+  useEffect(() => {
+    if (isMe) {
+      setConnectionStatus('none');
+      return;
+    }
+    if (hasConnection === null || hasSentRequest === null || hasRecvRequest === null) {
+      return;
+    }
+
+    if (hasConnection) {
+      setConnectionStatus('accepted');
+    } else if (hasSentRequest) {
+      setConnectionStatus('pending');
+    } else if (hasRecvRequest) {
+      setConnectionStatus('received');
+    } else {
+      setConnectionStatus('none');
+    }
+  }, [hasConnection, hasSentRequest, hasRecvRequest, isMe]);
 
   const fetchProfileData = async () => {
     setLoading(true);
@@ -71,46 +134,50 @@ export default function ProfilePage({ user }: { user: any }) {
     }
   };
 
-  const checkConnectionStatus = () => {
-    if (!user || !targetUid || isMe) return;
-
-    // Check Connections
-    const connRef = dbRef(rtdb, `connections/${user.uid}/${targetUid}`);
-    onValue(connRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setConnectionStatus('accepted');
-      } else {
-        // Check Sent Requests
-        const sentRef = dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`);
-        onValue(sentRef, (sentSnap) => {
-          if (sentSnap.exists()) {
-            setConnectionStatus('pending');
-          } else {
-            // Check Received Requests
-            const receivedRef = dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`);
-            onValue(receivedRef, (recSnap) => {
-              if (recSnap.exists()) {
-                setConnectionStatus('received');
-              } else {
-                setConnectionStatus('none');
-              }
-            });
-          }
-        });
-      }
-    });
-  };
-
   const handleSendRequest = async () => {
     if (!user || !targetUid || isMe || requestActionLoading) return;
     setRequestActionLoading(true);
     try {
+      // Automatic Mutual Accept: If they already sent us a request, trying to "Add" them should just accept.
+      if (connectionStatus === 'received') {
+        try {
+          const updates: any = {};
+          updates[`connections/${user.uid}/${targetUid}`] = true;
+          updates[`connections/${targetUid}/${user.uid}`] = true;
+          updates[`chat_requests/${user.uid}/${targetUid}`] = null;
+          await dbUpdate(dbRef(rtdb), updates);
+        } catch (atomicErr) {
+          console.warn("Atomic send-accept failed, using fallback set:", atomicErr);
+          await set(dbRef(rtdb, `connections/${user.uid}/${targetUid}`), true);
+          try {
+            await set(dbRef(rtdb, `connections/${targetUid}/${user.uid}`), true);
+          } catch (e) {}
+          await remove(dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`));
+        }
+        setConnectionStatus('accepted');
+        return;
+      }
+
       await set(dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`), {
         senderId: user.uid,
         senderName: user.displayName || 'Anonymous',
         senderPhoto: user.photoURL || '',
         timestamp: Date.now()
       });
+      setConnectionStatus('pending');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequestActionLoading(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!user || !targetUid || isMe || requestActionLoading) return;
+    setRequestActionLoading(true);
+    try {
+      await remove(dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`));
+      setConnectionStatus('none');
     } catch (err) {
       console.error(err);
     } finally {
@@ -119,18 +186,80 @@ export default function ProfilePage({ user }: { user: any }) {
   };
 
   const handleAcceptRequest = async () => {
-    if (!user || !targetUid || isMe || requestActionLoading) return;
+    if (!user?.uid || !targetUid || isMe || requestActionLoading) return;
     setRequestActionLoading(true);
     try {
-      // Add to both connections
-      await dbUpdate(dbRef(rtdb), {
-        [`connections/${user.uid}/${targetUid}`]: true,
-        [`connections/${targetUid}/${user.uid}`]: true
-      });
-      // Remove request
-      await remove(dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`));
-    } catch (err) {
+      try {
+        // Atomic accept: Add to both connections and remove request in one call
+        const updates: any = {};
+        updates[`connections/${user.uid}/${targetUid}`] = true;
+        updates[`connections/${targetUid}/${user.uid}`] = true;
+        updates[`chat_requests/${user.uid}/${targetUid}`] = null;
+        await dbUpdate(dbRef(rtdb), updates);
+      } catch (atomicErr) {
+        console.warn("Atomic accept failed, using fallback set:", atomicErr);
+        await set(dbRef(rtdb, `connections/${user.uid}/${targetUid}`), true);
+        try {
+          await set(dbRef(rtdb, `connections/${targetUid}/${user.uid}`), true);
+        } catch (otherErr) {
+          console.warn("Could not write target connection:", otherErr);
+        }
+        await remove(dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`));
+      }
+      setConnectionStatus('accepted');
+    } catch (err: any) {
       console.error(err);
+      alert("Failed to accept request: " + (err.message || "Unknown error"));
+    } finally {
+      setRequestActionLoading(false);
+    }
+  };
+
+  const handleRemoveConnection = async () => {
+    if (!user?.uid || !targetUid || isMe || requestActionLoading) return;
+    if (!window.confirm("Are you sure you want to remove this connection? You won't be able to message each other anymore.")) return;
+    
+    setRequestActionLoading(true);
+    try {
+      // Try atomic removal first
+      try {
+        const updates: any = {};
+        updates[`connections/${user.uid}/${targetUid}`] = null;
+        updates[`connections/${targetUid}/${user.uid}`] = null;
+        await dbUpdate(dbRef(rtdb), updates);
+      } catch (atomicErr) {
+        console.warn("Atomic removal failed, trying individual nodes:", atomicErr);
+        await remove(dbRef(rtdb, `connections/${user.uid}/${targetUid}`));
+        try {
+          await remove(dbRef(rtdb, `connections/${targetUid}/${user.uid}`));
+        } catch (e) {}
+      }
+
+      // Also clean up lingering requests
+      try {
+        await remove(dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`));
+      } catch (e) {}
+      try {
+        await remove(dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`));
+      } catch (e) {}
+
+      setConnectionStatus('none');
+    } catch (err: any) {
+      console.error("Error removing connection:", err);
+      alert("Failed to remove connection: " + (err.message || "Unknown error"));
+    } finally {
+      setRequestActionLoading(false);
+    }
+  };
+
+  const handleDeclineRequest = async () => {
+    if (!user?.uid || !targetUid || isMe || requestActionLoading) return;
+    setRequestActionLoading(true);
+    try {
+      await remove(dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`));
+      setConnectionStatus('none');
+    } catch (err) {
+      console.error("Error declining request:", err);
     } finally {
       setRequestActionLoading(false);
     }
@@ -312,36 +441,60 @@ export default function ProfilePage({ user }: { user: any }) {
                 <button
                   onClick={handleSendRequest}
                   disabled={requestActionLoading}
-                  className="w-full flex items-center justify-center px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-medium rounded-lg text-sm transition-all shadow-md active:scale-95 disabled:bg-neutral-400"
+                  className="w-full flex items-center justify-center px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-neutral-200 active:scale-95 disabled:bg-neutral-400"
                 >
                   <UserPlus className="w-4 h-4 mr-2" />
                   {requestActionLoading ? 'Sending...' : 'Add Author'}
                 </button>
               )}
               {connectionStatus === 'pending' && (
-                <div className="w-full flex items-center justify-center px-6 py-2.5 bg-neutral-100 text-neutral-500 font-medium rounded-lg text-sm border border-neutral-200">
-                  <Clock className="w-4 h-4 mr-2" />
-                  Sent Request
-                </div>
-              )}
-              {connectionStatus === 'received' && (
                 <button
-                  onClick={handleAcceptRequest}
+                  onClick={handleCancelRequest}
                   disabled={requestActionLoading}
-                  className="w-full flex items-center justify-center px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-all shadow-md active:scale-95"
+                  className="w-full flex items-center justify-center px-6 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold rounded-xl text-sm border border-rose-100 transition-all active:scale-95"
                 >
-                  <Check className="w-4 h-4 mr-2" />
-                  {requestActionLoading ? 'Accepting...' : 'Accept Request'}
+                  <Clock className="w-4 h-4 mr-2" />
+                  {requestActionLoading ? 'Cancelling...' : 'Cancel Request'}
                 </button>
               )}
+              {connectionStatus === 'received' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handleAcceptRequest}
+                    disabled={requestActionLoading}
+                    className="flex items-center justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-indigo-100 active:scale-95"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    {requestActionLoading ? '...' : 'Accept'}
+                  </button>
+                  <button
+                    onClick={handleDeclineRequest}
+                    disabled={requestActionLoading}
+                    className="flex items-center justify-center px-4 py-2.5 bg-white hover:bg-neutral-50 text-neutral-500 font-semibold rounded-xl text-sm border border-neutral-200 transition-all active:scale-95"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    {requestActionLoading ? '...' : 'Decline'}
+                  </button>
+                </div>
+              )}
               {connectionStatus === 'accepted' && (
-                <Link
-                  to={`/chat?userId=${targetUid}`}
-                  className="w-full flex items-center justify-center px-6 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-lg text-sm border border-indigo-200 transition-all active:scale-95"
-                >
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Continue Chat
-                </Link>
+                <div className="space-y-2">
+                  <Link
+                    to={`/chat?userId=${targetUid}`}
+                    className="w-full flex items-center justify-center px-6 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-xl text-sm border border-indigo-200 transition-all active:scale-95"
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Continue Chat
+                  </Link>
+                  <button
+                    onClick={handleRemoveConnection}
+                    disabled={requestActionLoading}
+                    className="w-full flex items-center justify-center px-6 py-2 bg-white hover:bg-neutral-50 text-neutral-400 hover:text-rose-500 font-bold rounded-xl text-[11px] uppercase tracking-wider transition-all border border-transparent hover:border-rose-100"
+                  >
+                    <UserMinus className="w-3.5 h-3.5 mr-1.5" />
+                    {requestActionLoading ? 'Processing...' : 'Remove Connection'}
+                  </button>
+                </div>
               )}
             </div>
           )}

@@ -7,7 +7,6 @@ import { Heart, Send, Sparkles, MessageSquare, UserPlus } from 'lucide-react';
 
 export default function HomePage({ user }: { user?: any }) {
   const [posts, setPosts] = useState<any[]>([]);
-  const [news, setNews] = useState<string>('');
   const [feelings, setFeelings] = useState<any[]>([]);
   const [feelingInput, setFeelingInput] = useState('');
   const [isSubmittingFeeling, setIsSubmittingFeeling] = useState(false);
@@ -16,19 +15,6 @@ export default function HomePage({ user }: { user?: any }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch live news
-    const newsRef = ref(rtdb, 'liveNews');
-    const unsubscribeNews = onValue(newsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setNews(data.text || '');
-      } else {
-        setNews('');
-      }
-    }, (err) => {
-      console.error("RTDB Error:", err);
-    });
-
     // Fetch feelings
     const feelingsRef = ref(rtdb, 'feelings');
     const unsubscribeFeelings = onValue(feelingsRef, (snapshot) => {
@@ -67,7 +53,6 @@ export default function HomePage({ user }: { user?: any }) {
     fetchPosts();
 
     return () => {
-      unsubscribeNews();
       unsubscribeFeelings();
     };
   }, []);
@@ -105,19 +90,7 @@ export default function HomePage({ user }: { user?: any }) {
   }
 
   return (
-    <div className="space-y-6">
-      {news && (
-        <div className="bg-indigo-600 text-white px-4 py-3 rounded-xl mb-8 flex items-center shadow-sm overflow-hidden whitespace-nowrap">
-          <span className="font-bold mr-4 shrink-0 flex items-center">
-            <span className="w-2 h-2 rounded-full bg-red-500 mr-2 animate-pulse"></span>
-            LIVE
-          </span>
-          <div className="overflow-hidden relative w-full">
-            <p className="animate-marquee inline-block">{news}</p>
-          </div>
-        </div>
-      )}
-      
+    <div className="space-y-6 pt-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Main Feed: Stories */}
