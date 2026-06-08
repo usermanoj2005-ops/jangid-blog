@@ -245,7 +245,7 @@ export default function ChatPage({ user }: { user: any }) {
   const [groups, setGroups] = useState<any[]>([]);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [groupName, setGroupName] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState<Record<string, boolean>>({});
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   // Sync groups list from Realtime Database
   useEffect(() => {
@@ -272,15 +272,14 @@ export default function ChatPage({ user }: { user: any }) {
   }, [user?.uid]);
 
   const toggleMember = (uid: string) => {
-    setSelectedMembers(prev => ({
-      ...prev,
-      [uid]: !prev[uid]
-    }));
+    setSelectedMembers(prev =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
   };
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) return;
-    const memberUids = Object.keys(selectedMembers).filter(uid => selectedMembers[uid]);
+    const memberUids = selectedMembers;
     
     setLoading(true);
     try {
@@ -311,7 +310,7 @@ export default function ChatPage({ user }: { user: any }) {
       });
 
       setGroupName('');
-      setSelectedMembers({});
+      setSelectedMembers([]);
       setShowCreateGroupModal(false);
       setActiveChat(groupId);
     } catch (err: any) {
