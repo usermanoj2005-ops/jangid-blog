@@ -556,14 +556,14 @@ export default function ChatPage({ user }: { user: any }) {
   const isSelectedChatBlocked = activeChat !== 'global' && !!blockedUsers[activeChat];
 
   return (
-    <div id="unified-chat-root" className="max-w-6xl mx-auto h-[calc(100vh-140px)] bg-black text-white rounded-3xl shadow-2xl border border-neutral-800 overflow-hidden flex flex-col md:flex-row relative font-sans">
+    <div id="unified-chat-root" className="max-w-6xl mx-auto h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-3xl shadow-2xl border border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans">
       
       {/* 📞 INCOMING CALL OVERLAY PANEL */}
       {incomingCall && !callActive && (
-        <div id="incoming-call-portal" className="absolute inset-0 bg-neutral-950/85 backdrop-blur-xl z-55 flex flex-col items-center justify-center p-6 text-center animate-fade-in animate-duration-300">
+        <div id="incoming-call-portal" className="absolute inset-0 bg-white/95 backdrop-blur-xl z-55 flex flex-col items-center justify-center p-6 text-center animate-fade-in animate-duration-300">
           <div className="relative mb-8">
             <span className="absolute inset-0 rounded-full bg-indigo-500/25 animate-ping" />
-            <div className="w-28 h-28 rounded-full border-4 border-indigo-500 bg-neutral-800 text-neutral-300 overflow-hidden flex items-center justify-center relative shadow-2xl">
+            <div className="w-28 h-28 rounded-full border-4 border-indigo-500 bg-neutral-100 text-neutral-600 overflow-hidden flex items-center justify-center relative shadow-2xl">
               {incomingCall.callerPhoto ? (
                 <img src={incomingCall.callerPhoto} alt={incomingCall.callerName} className="w-full h-full object-cover" />
               ) : (
@@ -572,8 +572,8 @@ export default function ChatPage({ user }: { user: any }) {
             </div>
           </div>
           
-          <h3 className="text-2xl font-serif font-semibold text-white tracking-wide mb-2 animate-pulse">{incomingCall.callerName}</h3>
-          <p className="text-neutral-400 text-sm tracking-widest uppercase mb-10">Incoming audio call...</p>
+          <h3 className="text-2xl font-serif font-semibold text-neutral-900 tracking-wide mb-2 animate-pulse">{incomingCall.callerName}</h3>
+          <p className="text-neutral-500 text-sm tracking-widest uppercase mb-10">Incoming audio call...</p>
           
           <div className="flex gap-6">
             <button
@@ -598,10 +598,10 @@ export default function ChatPage({ user }: { user: any }) {
 
       {/* 🎙️ OUTGOING RINGING CALL DIALOG */}
       {outgoingCall && !callActive && (
-        <div id="outgoing-call-portal" className="absolute inset-0 bg-neutral-950/85 backdrop-blur-xl z-55 flex flex-col items-center justify-center p-6 text-center">
+        <div id="outgoing-call-portal" className="absolute inset-0 bg-white/95 backdrop-blur-xl z-55 flex flex-col items-center justify-center p-6 text-center">
           <div className="relative mb-8">
             <span className="absolute inset-0 rounded-full bg-indigo-500/25 animate-ping" />
-            <div className="w-28 h-28 rounded-full border-4 border-indigo-400 bg-neutral-800 text-neutral-300 overflow-hidden flex items-center justify-center relative shadow-2xl">
+            <div className="w-28 h-28 rounded-full border-4 border-indigo-400 bg-neutral-100 text-neutral-600 overflow-hidden flex items-center justify-center relative shadow-2xl">
               {outgoingCall.receiverPhoto ? (
                 <img src={outgoingCall.receiverPhoto} alt={outgoingCall.receiverName} className="w-full h-full object-cover" />
               ) : (
@@ -610,8 +610,8 @@ export default function ChatPage({ user }: { user: any }) {
             </div>
           </div>
           
-          <h3 className="text-2xl font-serif font-semibold text-white tracking-wide mb-2">{outgoingCall.receiverName}</h3>
-          <p className="text-indigo-400 text-sm tracking-wider uppercase mb-12 animate-pulse">Ringing...</p>
+          <h3 className="text-2xl font-serif font-semibold text-neutral-900 tracking-wide mb-2">{outgoingCall.receiverName}</h3>
+          <p className="text-indigo-600 text-sm tracking-wider uppercase mb-12 animate-pulse">Ringing...</p>
           
           <button
             onClick={handleEndCall}
@@ -625,16 +625,16 @@ export default function ChatPage({ user }: { user: any }) {
       )}
 
       {/* Sidebar - Users List */}
-      <div className="w-full md:w-80 border-r border-neutral-800 flex flex-col bg-black shrink-0">
+      <div className="w-full md:w-80 border-r border-neutral-200 flex flex-col bg-neutral-50 shrink-0">
         
         {/* Chat List Header */}
-        <div className="p-4 md:p-5 border-b border-neutral-800">
+        <div className="p-4 md:p-5 border-b border-neutral-200">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold font-serif tracking-tight text-white flex items-center">
+            <h2 className="text-xl font-bold font-serif tracking-tight text-neutral-900 flex items-center">
               <MessagesSquare className="w-5 h-5 mr-2.5 text-indigo-500" />
               Direct Messages
             </h2>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900 border border-neutral-800 text-[11px] font-semibold tracking-wider text-indigo-400 rounded-full uppercase">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-[11px] font-semibold tracking-wider text-indigo-600 rounded-full uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
               Live Online
             </div>
@@ -642,17 +642,17 @@ export default function ChatPage({ user }: { user: any }) {
 
           {/* Search Contacts */}
           <div className="relative">
-            <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-2.5" />
             <input
               type="text"
               id="user-search-input"
               value={userSearchText}
               onChange={(e) => setUserSearchText(e.target.value)}
               placeholder="Search people..."
-              className="w-full bg-neutral-900 text-sm py-2 pl-9 pr-4 rounded-xl border border-neutral-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-white placeholder-neutral-500"
+              className="w-full bg-white text-sm py-2 pl-9 pr-4 rounded-xl border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-neutral-900 placeholder-neutral-450"
             />
             {userSearchText && (
-              <button onClick={() => setUserSearchText('')} className="absolute right-3 top-2.5 text-neutral-400 hover:text-white">
+              <button onClick={() => setUserSearchText('')} className="absolute right-3 top-2.5 text-neutral-400 hover:text-neutral-900">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -667,19 +667,19 @@ export default function ChatPage({ user }: { user: any }) {
             id="chat-item-global"
             className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all ${
               activeChat === 'global' 
-                ? 'bg-neutral-800 text-white border border-neutral-700' 
-                : 'hover:bg-neutral-900/60 text-neutral-300'
+                ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
+                : 'hover:bg-neutral-100 text-neutral-700'
             }`}
           >
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center mr-3 shrink-0 shadow-lg shadow-indigo-950/40 relative">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center mr-3 shrink-0 shadow-md relative">
               <Users className="w-5 h-5" />
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-neutral-950 shadow"></span>
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow"></span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-sm text-white flex items-center justify-between">
+              <div className={`font-semibold text-sm flex items-center justify-between ${activeChat === 'global' ? 'text-indigo-950' : 'text-neutral-800'}`}>
                 <span>Community Chat</span>
               </div>
-              <p className="text-xs text-neutral-400 truncate mt-0.5">Public bulletin group</p>
+              <p className="text-xs text-neutral-500 truncate mt-0.5">Public bulletin group</p>
             </div>
           </button>
 
@@ -699,27 +699,27 @@ export default function ChatPage({ user }: { user: any }) {
                 id={`chat-item-${u.uid}`}
                 className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all ${
                   activeChat === u.uid 
-                    ? 'bg-neutral-800 text-white border border-neutral-700' 
-                    : 'hover:bg-neutral-900/60 text-neutral-300'
+                    ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
+                    : 'hover:bg-neutral-100 text-neutral-700'
                 }`}
               >
-                <div className="w-10 h-10 rounded-full bg-neutral-800 text-neutral-300 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden">
+                <div className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-200">
                   {u.photoURL ? (
                     <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-tr from-indigo-500/30 to-violet-500/30 flex items-center justify-center text-sm font-bold text-indigo-400">
+                    <div className="w-full h-full bg-gradient-to-tr from-indigo-550/10 to-violet-550/10 flex items-center justify-center text-sm font-bold text-indigo-600">
                       {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
                   {isOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-neutral-950 shadow"></span>
+                    <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow"></span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-white flex items-center justify-between">
+                  <div className={`font-semibold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-indigo-950' : 'text-neutral-850'}`}>
                     <span className="truncate">{u.displayName}</span>
                     {hasBlockedThisUser && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-rose-950 border border-rose-900 text-rose-400 font-semibold rounded-md">Blocked</span>
+                      <span className="text-[9px] px-1.5 py-0.5 bg-rose-50 border border-rose-200 text-rose-600 font-semibold rounded-md font-sans">Blocked</span>
                     )}
                   </div>
                   <p className="text-xs text-neutral-400 truncate mt-0.5">
@@ -739,29 +739,29 @@ export default function ChatPage({ user }: { user: any }) {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-black">
+      <div className="flex-1 flex flex-col min-w-0 bg-white">
         
         {/* Header */}
-        <div className="bg-black border-b border-neutral-800 p-4 flex items-center justify-between z-10 shrink-0 relative">
+        <div className="bg-white border-b border-neutral-200 p-4 flex items-center justify-between z-10 shrink-0 relative">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-neutral-800 flex items-center justify-center shrink-0 relative overflow-hidden">
+            <div className="w-11 h-11 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 relative overflow-hidden border border-neutral-200">
               {activeChat === 'global' ? (
-                <div className="w-full h-full bg-indigo-900 text-white flex items-center justify-center shadow">
+                <div className="w-full h-full bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
                   <Users className="w-5 h-5" />
                 </div>
               ) : activeUserObj?.photoURL ? (
                 <img src={activeUserObj.photoURL} alt={activeUserObj.displayName} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-indigo-600/30 text-indigo-400 flex items-center justify-center text-base font-bold">
+                <div className="w-full h-full bg-indigo-50 text-indigo-600/80 flex items-center justify-center text-base font-bold">
                   {activeUserObj?.displayName?.charAt(0).toUpperCase() || 'A'}
                 </div>
               )}
             </div>
             <div>
-              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-white flex items-center gap-2">
+              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900 flex items-center gap-2">
                 {activeChat === 'global' ? 'Community Chat' : `${activeUserObj?.displayName}`}
               </h1>
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-neutral-500">
                 {activeChat === 'global' 
                   ? 'Connect with all authors and readers.' 
                   : isUserOnline(activeUserObj?.lastSeen) ? 'Online now' : 'Offline'
@@ -777,7 +777,7 @@ export default function ChatPage({ user }: { user: any }) {
                 onClick={handleInitiateCall}
                 id="call-init-btn"
                 disabled={isSelectedChatBlocked}
-                className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all text-indigo-600 hover:text-indigo-750 cursor-pointer"
                 title="Voice Call"
               >
                 <Phone className="w-4 h-4" />
@@ -787,8 +787,8 @@ export default function ChatPage({ user }: { user: any }) {
                 id="block-toggle-btn"
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold select-none cursor-pointer transition-all ${
                   isSelectedChatBlocked 
-                    ? 'bg-rose-900/30 border border-rose-800 text-rose-400 hover:bg-rose-900/50' 
-                    : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-rose-400 hover:bg-rose-950/20 hover:border-rose-900/50'
+                    ? 'bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-medium' 
+                    : 'bg-neutral-50 border border-neutral-200 text-neutral-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 transition-all font-medium'
                 }`}
               >
                 {isSelectedChatBlocked ? (
@@ -809,24 +809,24 @@ export default function ChatPage({ user }: { user: any }) {
 
         {/* 🎙️ ACTIVE VOICE CALL EQUALIZER BAR (Pulls down from header when Call connects) */}
         {callActive && (incomingCall || outgoingCall) && (
-          <div id="active-call-equalizer" className="bg-indigo-950/65 border-b border-indigo-900 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 transition-all duration-300 animate-slide-down">
+          <div id="active-call-equalizer" className="bg-indigo-50 border-b border-indigo-100 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 transition-all duration-300 animate-slide-down">
             <div className="flex items-center gap-3">
               <div className="relative">
                 <span className="absolute -inset-1 rounded-full bg-indigo-500/20 animate-ping"></span>
-                <div className="w-10 h-10 rounded-full border border-indigo-400 bg-indigo-900 overflow-hidden flex items-center justify-center">
-                  <Phone className="w-4 h-4 text-indigo-300 animate-pulse" />
+                <div className="w-10 h-10 rounded-full border border-indigo-300 bg-indigo-100 overflow-hidden flex items-center justify-center">
+                  <Phone className="w-4 h-4 text-indigo-600 animate-pulse" />
                 </div>
               </div>
               <div className="text-center sm:text-left">
-                <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Connected Voice Call</p>
-                <p className="text-sm font-semibold text-white mt-0.5">
+                <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest animate-pulse">Connected Voice Call</p>
+                <p className="text-sm font-semibold text-indigo-950 mt-0.5">
                   {incomingCall ? incomingCall.callerName : outgoingCall?.receiverName}
                 </p>
               </div>
             </div>
 
             {/* Canvas Analyzer Display */}
-            <div className="flex-1 max-w-[200px] h-10 bg-neutral-950/50 hover:bg-neutral-950 border border-indigo-900/30 rounded-xl px-2.5 flex items-center justify-center relative overflow-hidden">
+            <div className="flex-1 max-w-[200px] h-10 bg-white hover:bg-neutral-50 border border-indigo-200 rounded-xl px-2.5 flex items-center justify-center relative overflow-hidden">
               <canvas 
                 ref={canvasRef} 
                 width={180} 
@@ -839,14 +839,14 @@ export default function ChatPage({ user }: { user: any }) {
             {/* Controls */}
             <div className="flex items-center gap-3">
               {/* Call Timer duration */}
-              <div id="call-timer-ticker" className="bg-neutral-950 border border-indigo-900/50 text-indigo-300 text-xs px-3 py-1.5 rounded-lg font-mono tracking-wider font-semibold">
+              <div id="call-timer-ticker" className="bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs px-3 py-1.5 rounded-lg font-mono tracking-wider font-semibold">
                 {formatTime(callDuration)}
               </div>
               
               <button
                 onClick={() => setCallMuted(!callMuted)}
                 id="toggle-mic-btn"
-                className={`p-2 rounded-lg transition-all cursor-pointer ${callMuted ? 'bg-rose-900 text-rose-300' : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white'}`}
+                className={`p-2 rounded-lg transition-all cursor-pointer ${callMuted ? 'bg-rose-100 text-rose-600 border border-rose-200' : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 border border-neutral-200'}`}
                 title={callMuted ? "Unmute Microphone" : "Mute Microphone"}
               >
                 {callMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -855,7 +855,7 @@ export default function ChatPage({ user }: { user: any }) {
               <button
                 onClick={() => setCallSpeakerActive(!callSpeakerActive)}
                 id="toggle-speaker-btn"
-                className={`p-2 rounded-lg transition-all cursor-pointer ${!callSpeakerActive ? 'bg-amber-900 text-amber-300' : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white'}`}
+                className={`p-2 rounded-lg transition-all cursor-pointer ${!callSpeakerActive ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950 border border-neutral-200'}`}
                 title="Toggle Speaker"
               >
                 {callSpeakerActive ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -864,7 +864,7 @@ export default function ChatPage({ user }: { user: any }) {
               <button
                 onClick={handleEndCall}
                 id="end-call-btn"
-                className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white uppercase tracking-widest cursor-pointer hover:shadow-lg hover:shadow-rose-950/20 transition-all flex items-center justify-center"
+                className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white uppercase tracking-widest cursor-pointer hover:shadow-lg transition-all flex items-center justify-center"
                 title="End Call Connection"
               >
                 <PhoneOff className="w-4 h-4 mr-1.5" /> Stop
@@ -874,21 +874,21 @@ export default function ChatPage({ user }: { user: any }) {
         )}
 
         {error && (
-          <div className="mx-4 mt-4 p-3 bg-rose-950/40 text-rose-400 border border-rose-900/50 rounded-xl text-sm shrink-0 flex items-center">
+          <div className="mx-4 mt-4 p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-sm shrink-0 flex items-center animate-fade-in">
             <AlertCircle className="w-5 h-5 mr-2 shrink-0 text-rose-500" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto scrollbar-none p-4 md:p-6 space-y-6 bg-black">
+        <div className="flex-1 overflow-y-auto scrollbar-none p-4 md:p-6 space-y-6 bg-neutral-50/50">
           {loading ? (
             <div className="flex justify-center items-center h-full">
-              <div className="w-8 h-8 border-4 border-neutral-800 border-t-indigo-500 rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-4 border-neutral-200 border-t-indigo-500 rounded-full animate-spin"></div>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-neutral-500 space-y-2">
-              <MessageSquare className="w-10 h-10 text-neutral-700" />
+            <div className="flex flex-col items-center justify-center h-full text-neutral-400 space-y-2">
+              <MessageSquare className="w-10 h-10 text-neutral-305" />
               <p className="text-sm font-serif">Empty dialog queue. Be the first to start!</p>
             </div>
           ) : (
@@ -908,11 +908,11 @@ export default function ChatPage({ user }: { user: any }) {
                   className={`flex items-start gap-3 group relative max-w-full ${isMe ? 'flex-row-reverse' : ''}`}
                 >
                   {/* Photo of Author */}
-                  <div className="w-8 h-8 rounded-full bg-neutral-800 overflow-hidden flex items-center justify-center shrink-0 border border-neutral-800 mt-1">
+                  <div className="w-8 h-8 rounded-full bg-neutral-100 overflow-hidden flex items-center justify-center shrink-0 border border-neutral-200 mt-1">
                     {msg.authorPhoto ? (
                       <img src={msg.authorPhoto} alt={msg.authorName} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-xs font-bold text-neutral-400">
+                      <span className="text-xs font-bold text-neutral-500">
                         {msg.authorName?.charAt(0).toUpperCase()}
                       </span>
                     )}
@@ -920,7 +920,7 @@ export default function ChatPage({ user }: { user: any }) {
 
                   <div className={`flex flex-col max-w-[70%] sm:max-w-[60%] ${isMe ? 'items-end' : 'items-start'}`}>
                     {showAuthorInfo && (
-                      <span className="text-[11px] font-semibold text-neutral-400 mb-1 px-1">
+                      <span className="text-[11px] font-semibold text-neutral-550 mb-1 px-1">
                         {isMe ? 'You' : msg.authorName}
                       </span>
                     )}
@@ -931,14 +931,14 @@ export default function ChatPage({ user }: { user: any }) {
                         className={`px-4 py-2.5 rounded-2xl text-[14px] leading-relaxed break-words shadow-sm relative group/bubble select-text ${
                           isMe 
                             ? 'bg-indigo-600 text-white rounded-tr-none' 
-                            : 'bg-neutral-800 text-neutral-200 rounded-tl-none border border-neutral-700/50'
+                            : 'bg-white text-neutral-900 rounded-tl-none border border-neutral-2/100 border-neutral-200'
                         }`}
                       >
                         {msg.text}
 
                         {/* HOVER HOVER CONTROLS TOOLBAR (Quick reactions & deletes) */}
                         <div 
-                          className={`absolute bottom-full mb-1 flex items-center bg-neutral-950 border border-neutral-800 rounded-full py-1 px-2.5 shadow-xl scale-90 opacity-0 pointer-events-none group-hover/bubble:opacity-100 group-hover/bubble:pointer-events-auto transition-all transform hover:scale-100 z-10 flex-row gap-1.5 ${
+                          className={`absolute bottom-full mb-1 flex items-center bg-white border border-neutral-200 rounded-full py-1 px-2.5 shadow-lg scale-90 opacity-0 pointer-events-none group-hover/bubble:opacity-100 group-hover/bubble:pointer-events-auto transition-all transform hover:scale-100 z-10 flex-row gap-1.5 ${
                             isMe ? 'right-0' : 'left-0'
                           }`}
                         >
@@ -947,7 +947,7 @@ export default function ChatPage({ user }: { user: any }) {
                             <button
                               key={reaction}
                               onClick={() => handleToggleReaction(msg.id, reaction)}
-                              className="text-sm px-1.5 py-0.5 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                              className="text-sm px-1.5 py-0.5 hover:bg-neutral-100 rounded transition-colors cursor-pointer"
                             >
                               {reaction}
                             </button>
@@ -957,7 +957,7 @@ export default function ChatPage({ user }: { user: any }) {
                           {isMe && (
                             <button
                               onClick={() => handleDeleteMessage(msg.id)}
-                              className="p-1 text-neutral-400 hover:text-rose-500 hover:bg-rose-950/30 rounded cursor-pointer transition-colors border-l border-neutral-800 ml-1.5"
+                              className="p-1 text-neutral-400 hover:text-rose-500 hover:bg-rose-50 rounded cursor-pointer transition-colors border-l border-neutral-200 ml-1.5 pl-1.5"
                               title="Delete message"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -981,8 +981,8 @@ export default function ChatPage({ user }: { user: any }) {
                                 onClick={() => handleToggleReaction(msg.id, reaction)}
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all cursor-pointer ${
                                   hasMyReaction 
-                                    ? 'bg-indigo-500/25 border-indigo-500 text-indigo-300' 
-                                    : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500'
+                                    ? 'bg-indigo-50 border-indigo-300 text-indigo-600 font-medium' 
+                                    : 'bg-white border-neutral-200 text-neutral-600 hover:border-neutral-400 hover:bg-neutral-50'
                                 }`}
                                 title={`Reacted by: ${reactArray.join(', ')}`}
                               >
@@ -1003,14 +1003,14 @@ export default function ChatPage({ user }: { user: any }) {
         </div>
 
         {/* Input Bar */}
-        <div className="bg-black border-t border-neutral-800 p-4 shrink-0 relative">
+        <div className="bg-white border-t border-neutral-200 p-4 shrink-0 relative">
           
           {/* Blocking Banner Cover */}
           {isSelectedChatBlocked ? (
-            <div className="bg-rose-950/30 border border-rose-900 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
               <div>
-                <h4 className="text-sm font-semibold text-rose-300">This User is Blocked</h4>
-                <p className="text-xs text-neutral-400 mt-0.5">Unblock to start direct lines of communication, view metadata, or connect audio dials.</p>
+                <h4 className="text-sm font-semibold text-rose-700">This User is Blocked</h4>
+                <p className="text-xs text-neutral-500 mt-0.5">Unblock to start direct lines of communication, view metadata, or connect audio dials.</p>
               </div>
               <button
                 onClick={() => handleToggleBlock(activeChat)}
@@ -1028,7 +1028,7 @@ export default function ChatPage({ user }: { user: any }) {
                   type="button"
                   onClick={() => setShowEmojis(!showEmojis)}
                   className={`p-3 rounded-full transition-all shrink-0 cursor-pointer ${
-                    showEmojis ? 'text-indigo-400 bg-neutral-900' : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+                    showEmojis ? 'text-indigo-600 bg-neutral-100' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
                   }`}
                   title="Emoji Store"
                 >
@@ -1037,13 +1037,13 @@ export default function ChatPage({ user }: { user: any }) {
 
                 {/* 🌟 OVERHAULED CATEGORIZED & SEARCHABLE EMOJI DRAWER */}
                 {showEmojis && (
-                  <div id="emoji-picker-drawer" className="absolute bottom-full left-0 mb-3 bg-neutral-950 border border-neutral-800 shadow-2xl rounded-2xl p-3.5 w-72 sm:w-80 z-20 flex flex-col text-white animate-slide-up">
+                  <div id="emoji-picker-drawer" className="absolute bottom-full left-0 mb-3 bg-white border border-neutral-200 shadow-2xl rounded-2xl p-3.5 w-72 sm:w-80 z-20 flex flex-col text-neutral-900 animate-slide-up">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold tracking-widest text-indigo-400 uppercase">Express Yourself</span>
+                      <span className="text-xs font-bold tracking-widest text-indigo-600 uppercase">Express Yourself</span>
                       <button 
                         type="button" 
                         onClick={() => { setShowEmojis(false); setEmojiSearch(''); }} 
-                        className="p-1 hover:bg-neutral-900 rounded-lg text-neutral-400 hover:text-white transition-colors"
+                        className="p-1 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-neutral-900 transition-colors"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1057,12 +1057,12 @@ export default function ChatPage({ user }: { user: any }) {
                         value={emojiSearch}
                         onChange={(e) => setEmojiSearch(e.target.value)}
                         placeholder="Search emoji (e.g. smile)..."
-                        className="w-full bg-neutral-900 text-xs py-2 pl-8 pr-4 rounded-lg border border-neutral-800 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-full bg-neutral-50 text-xs py-2 pl-8 pr-4 rounded-lg border border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     </div>
 
                     {/* Tabs row */}
-                    <div className="flex gap-1 border-b border-neutral-900 pb-2 mb-2 justify-between">
+                    <div className="flex gap-1 border-b border-neutral-100 pb-2 mb-2 justify-between">
                       {['All', 'Smileys', 'Gestures', 'Symbols'].map((tab) => (
                         <button
                           key={tab}
@@ -1070,8 +1070,8 @@ export default function ChatPage({ user }: { user: any }) {
                           onClick={() => { setActiveEmojiTab(tab as any); }}
                           className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded font-semibold transition-all cursor-pointer ${
                             activeEmojiTab === tab 
-                              ? 'bg-indigo-600/25 border border-indigo-500/50 text-indigo-300' 
-                              : 'text-neutral-400 hover:text-neutral-200'
+                              ? 'bg-indigo-50 border border-indigo-200 text-indigo-600' 
+                              : 'text-neutral-400 hover:text-neutral-900'
                           }`}
                         >
                           {tab}
@@ -1086,14 +1086,14 @@ export default function ChatPage({ user }: { user: any }) {
                           key={emoji.char}
                           type="button"
                           onClick={() => insertEmoji(emoji.char)}
-                          className="text-xl hover:bg-neutral-800 p-1 rounded-lg transition-transform hover:scale-125 cursor-pointer flex items-center justify-center"
+                          className="text-xl hover:bg-neutral-100 p-1 rounded-lg transition-transform hover:scale-125 cursor-pointer flex items-center justify-center animate-fade-in"
                           title={emoji.keywords}
                         >
                           {emoji.char}
                         </button>
                       ))}
                       {filteredEmojis.length === 0 && (
-                        <div className="col-span-6 flex flex-col justify-center items-center h-full text-neutral-500 text-xs">
+                        <div className="col-span-6 flex flex-col justify-center items-center h-full text-neutral-450 text-xs">
                           No matching emojis
                         </div>
                       )}
@@ -1113,7 +1113,7 @@ export default function ChatPage({ user }: { user: any }) {
                   }
                 }}
                 placeholder={activeChat === 'global' ? "Write message to global channel... (Press Enter to send)" : `Write direct message to ${activeUserObj?.displayName || 'Author'}...`}
-                className="flex-1 max-h-32 min-h-[48px] bg-neutral-900 text-neutral-200 border border-neutral-800 rounded-2xl py-3 px-4 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-neutral-950 focus:border-indigo-500 resize-none text-[14px]"
+                className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px]"
                 rows={1}
               />
 
@@ -1121,7 +1121,7 @@ export default function ChatPage({ user }: { user: any }) {
               <button
                 type="submit"
                 disabled={!newMessage.trim()}
-                className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-800 disabled:text-neutral-600 disabled:opacity-40 text-white rounded-full transition-all shrink-0 mb-1 cursor-pointer hover:shadow-lg hover:shadow-indigo-950/20 active:scale-95 flex items-center justify-center shadow"
+                className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-100 disabled:text-neutral-400 disabled:opacity-45 text-white rounded-full transition-all shrink-0 mb-1 cursor-pointer hover:shadow shadow active:scale-95 flex items-center justify-center"
               >
                 <Send className="w-4 h-4" />
               </button>
