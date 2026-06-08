@@ -225,6 +225,7 @@ export default function ChatPage({ user }: { user: any }) {
   const [activeEmojiTab, setActiveEmojiTab] = useState<'All' | 'Smileys' | 'Gestures' | 'Symbols'>('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chatBgColor, setChatBgColor] = useState<string>('default');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -561,6 +562,21 @@ export default function ChatPage({ user }: { user: any }) {
 
     return () => unsubscribeUsers();
   }, [user.uid]);
+
+  // Fetch my profile info & chat background preference
+  useEffect(() => {
+    if (!user?.uid) return;
+    const myUserRef = ref(rtdb, `users/${user.uid}`);
+    const unsubscribeMyUser = onValue(myUserRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        if (data.chatBgColor) {
+          setChatBgColor(data.chatBgColor);
+        }
+      }
+    });
+    return () => unsubscribeMyUser();
+  }, [user?.uid]);
 
   // 2. Fetch my blocks
   useEffect(() => {
@@ -1552,7 +1568,15 @@ export default function ChatPage({ user }: { user: any }) {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto scrollbar-none p-4 md:p-6 space-y-6 bg-neutral-50/50">
+        <div className={`flex-1 overflow-y-auto scrollbar-none p-4 md:p-6 space-y-6 transition-all duration-300 ${
+          chatBgColor === 'lavender' ? 'bg-indigo-50/60' :
+          chatBgColor === 'emerald' ? 'bg-emerald-50/65' :
+          chatBgColor === 'amber' ? 'bg-amber-50/65' :
+          chatBgColor === 'sky' ? 'bg-sky-50/65' :
+          chatBgColor === 'rose' ? 'bg-rose-50/65' :
+          chatBgColor === 'dark' ? 'bg-neutral-900 border-x border-neutral-800' :
+          'bg-neutral-50/50'
+        }`}>
           {activeChat !== 'global' && !connections[activeChat] ? (
             <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
               <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6 border border-amber-100">
@@ -1668,7 +1692,9 @@ export default function ChatPage({ user }: { user: any }) {
 
                   <div className={`flex flex-col max-w-[70%] sm:max-w-[60%] ${isMe ? 'items-end' : 'items-start'}`}>
                     {showAuthorInfo && (
-                      <span className="text-[11px] font-semibold text-neutral-550 mb-1 px-1">
+                      <span className={`text-[11px] font-semibold mb-1 px-1 ${
+                        chatBgColor === 'dark' ? 'text-neutral-400' : 'text-neutral-550'
+                      }`}>
                         {isMe ? 'You' : msg.authorName}
                       </span>
                     )}

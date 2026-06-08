@@ -9,6 +9,29 @@ import { ref as dbRef, update as dbUpdate, onValue, set, remove, get } from 'fir
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 
+export const AVATAR_GALLERY = [
+  { url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80', label: 'Violet' },
+  { url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80', label: 'Arthur' },
+  { url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80', label: 'Rose' },
+  { url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80', label: 'Liam' },
+  { url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&h=150&q=80', label: 'Clara' },
+  { url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&h=150&q=80', label: 'David' },
+  { url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&h=150&q=80', label: 'Elena' },
+  { url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80', label: 'Maya' },
+  { url: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=150&h=150&q=80', label: 'Mark' },
+  { url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&h=150&q=80', label: 'Tara' },
+];
+
+export const CHAT_BG_PRESETS = [
+  { id: 'default', name: 'Default', bgClass: 'bg-neutral-50/50', previewBg: 'bg-neutral-100 border-neutral-300' },
+  { id: 'lavender', name: 'Lavender', bgClass: 'bg-indigo-50/60', previewBg: 'bg-indigo-150 border-indigo-200' },
+  { id: 'emerald', name: 'Mint Green', bgClass: 'bg-emerald-50/60', previewBg: 'bg-emerald-150 border-emerald-200' },
+  { id: 'amber', name: 'Warm Amber', bgClass: 'bg-amber-50/60', previewBg: 'bg-amber-150 border-amber-200' },
+  { id: 'sky', name: 'Ocean Sky', bgClass: 'bg-sky-50/60', previewBg: 'bg-sky-150 border-sky-200' },
+  { id: 'rose', name: 'Soft Rose', bgClass: 'bg-rose-50/60', previewBg: 'bg-rose-150 border-rose-200' },
+  { id: 'dark', name: 'Charcoal', bgClass: 'bg-neutral-900', previewBg: 'bg-neutral-800 border-neutral-700' },
+];
+
 export default function ProfilePage({ user }: { user: any }) {
   const { userId } = useParams();
   const isMe = !userId || userId === user?.uid;
@@ -20,6 +43,7 @@ export default function ProfilePage({ user }: { user: any }) {
   const [isEditing, setIsEditing] = useState(false);
   const [newName, setNewName] = useState(user?.displayName || '');
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
+  const [chatBgColor, setChatBgColor] = useState('default');
   const [updateLoading, setUpdateLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -108,14 +132,20 @@ export default function ProfilePage({ user }: { user: any }) {
       const userRef = dbRef(rtdb, `users/${targetUid}`);
       const userSnap = await get(userRef);
       if (userSnap.exists()) {
-        setProfileUser(userSnap.val());
+        const val = userSnap.val();
+        setProfileUser(val);
+        if (val.chatBgColor) {
+          setChatBgColor(val.chatBgColor);
+        }
       } else if (isMe) {
         setProfileUser({
           uid: user.uid,
           displayName: user.displayName,
           email: user.email,
-          photoURL: user.photoURL
+          photoURL: user.photoURL,
+          chatBgColor: 'default'
         });
+        setChatBgColor('default');
       }
 
       // Fetch Posts from Firestore
@@ -317,8 +347,9 @@ export default function ProfilePage({ user }: { user: any }) {
   const handleUpdateProfile = async () => {
     const nameChanged = newName.trim() && newName !== user.displayName;
     const photoChanged = photoURL.trim() !== (user.photoURL || '');
+    const bgChanged = chatBgColor !== (profileUser?.chatBgColor || 'default');
 
-    if (!nameChanged && !photoChanged) {
+    if (!nameChanged && !photoChanged && !bgChanged) {
       setIsEditing(false);
       return;
     }
@@ -327,7 +358,7 @@ export default function ProfilePage({ user }: { user: any }) {
     try {
       const finalName = newName.trim() || user.displayName;
       const finalPhoto = photoURL.trim() || null;
-      if (auth.currentUser) {
+      if (auth.currentUser && (nameChanged || photoChanged)) {
         await updateProfile(auth.currentUser, { 
           displayName: finalName,
           photoURL: finalPhoto
@@ -337,12 +368,14 @@ export default function ProfilePage({ user }: { user: any }) {
       try {
         await dbUpdate(dbRef(rtdb, `users/${user.uid}`), {
           displayName: finalName,
-          photoURL: finalPhoto || ''
+          photoURL: finalPhoto || '',
+          chatBgColor: chatBgColor
         });
       } catch (dbErr) {
         console.warn("Could not sync profile update to presence database database", dbErr);
       }
       setIsEditing(false);
+      setProfileUser((prev: any) => prev ? { ...prev, displayName: finalName, photoURL: finalPhoto || '', chatBgColor } : null);
     } catch (error) {
       console.error("Error updating profile:", error);
     } finally {
@@ -392,17 +425,44 @@ export default function ProfilePage({ user }: { user: any }) {
               </div>
 
               <div className="flex flex-col items-center gap-2 pt-1">
-                <label className="text-xs font-medium text-neutral-500 w-full text-left font-semibold">Profile Image</label>
+                <label className="text-xs font-medium text-neutral-550 w-full text-left font-semibold">Profile Image Selection</label>
+                
+                {/* Avatar Gallery Selector Grid */}
+                <div className="w-full text-left bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 mb-2">
+                  <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1.5">Gallery Presets (Click to choose)</span>
+                  <div className="grid grid-cols-5 gap-1.5 max-h-[110px] overflow-y-auto pr-1 scrollbar-thin">
+                    {AVATAR_GALLERY.map((avatar, idx) => {
+                      const isSelected = photoURL === avatar.url;
+                      return (
+                        <button
+                          key={avatar.url}
+                          type="button"
+                          onClick={() => setPhotoURL(avatar.url)}
+                          className={`w-9 h-9 rounded-full overflow-hidden border transition-all relative shrink-0 active:scale-95 hover:brightness-95 ${
+                            isSelected 
+                              ? 'border-indigo-600 ring-2 ring-indigo-200 ring-offset-1 scale-105' 
+                              : 'border-neutral-200'
+                          }`}
+                          title={avatar.label}
+                        >
+                          <img src={avatar.url} alt={avatar.label} className="w-full h-full object-cover" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <input
                   type="text"
                   value={photoURL}
                   onChange={(e) => setPhotoURL(e.target.value)}
-                  placeholder="Or paste image URL"
-                  className="border border-neutral-200 rounded px-3 py-1.5 text-sm w-full text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 mb-2"
+                  placeholder="Custom image URL"
+                  className="border border-neutral-200 rounded px-3 py-1.5 text-sm w-full text-center focus:outline-none focus:ring-2 focus:ring-neutral-900 mb-1"
                   disabled={updateLoading || uploadingImage}
                 />
-                <label className="cursor-pointer bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs px-3 py-1.5 rounded transition-colors w-full text-center">
-                  {uploadingImage ? 'Uploading...' : 'Upload from device'}
+                
+                <label className="cursor-pointer bg-neutral-100 hover:bg-neutral-200 text-neutral-750 text-xs px-3 py-1.5 rounded transition-all w-full text-center border border-neutral-200">
+                  {uploadingImage ? 'Uploading...' : 'Upload custom file'}
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -411,6 +471,33 @@ export default function ProfilePage({ user }: { user: any }) {
                     disabled={updateLoading || uploadingImage}
                   />
                 </label>
+              </div>
+
+              {/* Chat Background Custom Selector */}
+              <div className="w-full text-left mt-2 border-t border-neutral-150 pt-2.5">
+                <label className="text-xs font-semibold text-neutral-600 block mb-1.5">Chat Background Theme</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {CHAT_BG_PRESETS.map((preset) => {
+                    const isSelected = chatBgColor === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setChatBgColor(preset.id)}
+                        className={`flex flex-col items-center justify-center p-1.5 rounded-xl border transition-all text-center group active:scale-95 cursor-pointer ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/40 shadow-sm ring-1 ring-indigo-100'
+                            : 'border-neutral-200 bg-white hover:bg-neutral-50 hover:border-neutral-300'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border border-neutral-350 shadow-inner mb-0.5 ${preset.id === 'default' ? 'bg-[#f5f5f5]' : preset.id === 'dark' ? 'bg-[#18181b]' : preset.bgClass}`} />
+                        <span className={`text-[9px] font-semibold tracking-tight truncate w-full ${isSelected ? 'text-indigo-600 font-bold' : 'text-neutral-500'}`}>
+                          {preset.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="flex justify-center gap-2 mt-2">
                 <button onClick={handleUpdateProfile} disabled={updateLoading} className="text-green-600 p-1.5 px-3 bg-green-50 hover:bg-green-100 rounded text-sm font-medium transition-colors flex items-center cursor-pointer">
@@ -517,6 +604,21 @@ export default function ProfilePage({ user }: { user: any }) {
               <span className="text-neutral-500 flex items-center"><FileText className="w-4 h-4 mr-2"/> Stories Published</span>
               <span className="font-semibold text-neutral-900">{loading ? '-' : posts.length}</span>
             </div>
+            {isMe && (
+              <div className="flex items-center justify-between text-sm border-t border-neutral-100 pt-3">
+                <span className="text-neutral-500 flex items-center">
+                  <div className={`w-3.5 h-3.5 rounded-full border border-neutral-350 mr-2 ${
+                    chatBgColor === 'default' ? 'bg-[#f5f5f5]' :
+                    chatBgColor === 'dark' ? 'bg-[#18181b]' :
+                    CHAT_BG_PRESETS.find(p => p.id === chatBgColor)?.bgClass || 'bg-neutral-100'
+                  }`} />
+                  Chat Backdrop Style
+                </span>
+                <span className="font-semibold text-neutral-900 capitalize">
+                  {CHAT_BG_PRESETS.find(p => p.id === chatBgColor)?.name || 'Default'}
+                </span>
+              </div>
+            )}
           </div>
           
           {isMe && (
