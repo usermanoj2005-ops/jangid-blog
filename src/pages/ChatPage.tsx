@@ -37,7 +37,12 @@ import {
   AlertCircle,
   Play,
   Pause,
-  ArrowLeft
+  ArrowLeft,
+  Plus,
+  PlusCircle,
+  CheckSquare,
+  Square,
+  UserCheck
 } from 'lucide-react';
 
 // Categorized search library for emojis
@@ -234,7 +239,88 @@ export default function ChatPage({ user }: { user: any }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectUserParam = searchParams.get('userId');
 
-  const [activeChat, setActiveChat] = useState<'global' | string>('global');
+  const [activeChat, setActiveChat] = useState<string>('');
+
+  // Groups states
+  const [groups, setGroups] = useState<any[]>([]);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState<Record<string, boolean>>({});
+
+  // Sync groups list from Realtime Database
+  useEffect(() => {
+    if (!user?.uid) return;
+    const groupsRef = ref(rtdb, 'groups');
+    const unsubscribeGroups = onValue(groupsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const userGroups = Object.entries(data)
+          .map(([key, val]: [string, any]) => ({
+            id: key,
+            ...val,
+          }))
+          .filter((g: any) => g.members && g.members[user.uid])
+          .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        setGroups(userGroups);
+      } else {
+        setGroups([]);
+      }
+    }, (err) => {
+      console.error("Error reading groups:", err);
+    });
+    return () => unsubscribeGroups();
+  }, [user?.uid]);
+
+  const toggleMember = (uid: string) => {
+    setSelectedMembers(prev => ({
+      ...prev,
+      [uid]: !prev[uid]
+    }));
+  };
+
+  const handleCreateGroup = async () => {
+    if (!groupName.trim()) return;
+    const memberUids = Object.keys(selectedMembers).filter(uid => selectedMembers[uid]);
+    
+    setLoading(true);
+    try {
+      const newRef = push(ref(rtdb, 'groups'));
+      const groupId = newRef.key;
+      if (!groupId) return;
+
+      const prunedMembers: Record<string, boolean> = { [user.uid]: true };
+      memberUids.forEach((uid) => {
+        prunedMembers[uid] = true;
+      });
+
+      await set(newRef, {
+        id: groupId,
+        name: groupName.trim(),
+        members: prunedMembers,
+        createdBy: user.uid,
+        timestamp: Date.now()
+      });
+
+      // System welcome message
+      await push(ref(rtdb, `group_messages/${groupId}`), {
+        text: `👋 Welcome to your new group: ${groupName.trim()}! Founded by ${user.displayName || 'Author'}.`,
+        authorId: 'system',
+        authorName: 'System',
+        authorPhoto: '',
+        timestamp: rtdbServerTimestamp()
+      });
+
+      setGroupName('');
+      setSelectedMembers({});
+      setShowCreateGroupModal(false);
+      setActiveChat(groupId);
+    } catch (err: any) {
+      console.error("Error creating group:", err);
+      setError("Failed to create group.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const [usersInfo, setUsersInfo] = useState<any[]>([]);
   const [userSearchText, setUserSearchText] = useState('');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
@@ -254,7 +340,8 @@ export default function ChatPage({ user }: { user: any }) {
 
   // Synchronize active chat connection status
   useEffect(() => {
-    if (!activeChat || activeChat === 'global' || activeChat === user?.uid || !user?.uid) {
+    const isGroup = groups.some(g => g.id === activeChat);
+    if (!activeChat || activeChat === 'global' || isGroup || activeChat === user?.uid || !user?.uid) {
       setActiveChatConnStatus('none');
       setActiveHasConnection(false);
       setActiveHasSentRequest(false);
@@ -292,11 +379,12 @@ export default function ChatPage({ user }: { user: any }) {
       u2();
       u3();
     };
-  }, [activeChat, user?.uid]);
+  }, [activeChat, user?.uid, groups]);
 
   // Consolidate live states safely
   useEffect(() => {
-    if (!activeChat || activeChat === 'global' || activeChat === user?.uid) {
+    const isGroup = groups.some(g => g.id === activeChat);
+    if (!activeChat || activeChat === 'global' || isGroup || activeChat === user?.uid) {
       setActiveChatConnStatus('none');
       return;
     }
@@ -313,7 +401,7 @@ export default function ChatPage({ user }: { user: any }) {
     } else {
       setActiveChatConnStatus('none');
     }
-  }, [activeHasConnection, activeHasSentRequest, activeHasRecvRequest, activeChat, user?.uid]);
+  }, [activeHasConnection, activeHasSentRequest, activeHasRecvRequest, activeChat, user?.uid, groups]);
 
   // Switch to chat view automatically when activeChat changes on mobile
   useEffect(() => {
@@ -498,7 +586,7 @@ export default function ChatPage({ user }: { user: any }) {
       } catch (e) {}
 
       // Reset the active viewer and confirmation state
-      setActiveChat('global');
+      setActiveChat('');
       setConfirmDisconnectId(null);
     } catch (err: any) {
       console.error("Error removing connection:", err);
@@ -924,9 +1012,17 @@ export default function ChatPage({ user }: { user: any }) {
 
   // 6. Fetch messages based on activeChat selection
   useEffect(() => {
+    if (!activeChat) {
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     let messagesNode = 'messages';
-    if (activeChat !== 'global') {
+    const isGroup = groups.some(g => g.id === activeChat);
+    if (isGroup) {
+      messagesNode = `group_messages/${activeChat}`;
+    } else if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
       messagesNode = `direct_messages/${ids[0]}_${ids[1]}`;
     }
@@ -943,7 +1039,7 @@ export default function ChatPage({ user }: { user: any }) {
         setMessages(msgs);
 
         // Update read-receipts: Mark any unseen messages sent by the counterparty as seen
-        if (activeChat !== 'global' && user?.uid) {
+        if (activeChat !== 'global' && !isGroup && user?.uid) {
           const updates: Record<string, any> = {};
           let hasUnseen = false;
           msgs.forEach((m) => {
@@ -983,13 +1079,16 @@ export default function ChatPage({ user }: { user: any }) {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    if (activeChat !== 'global' && !connections[activeChat]) {
+    const isGroup = groups.some(g => g.id === activeChat);
+    if (activeChat !== 'global' && !isGroup && !connections[activeChat]) {
       setError("Cannot send message. You must be connected with this author to send messages.");
       return;
     }
 
     let messagesNode = 'messages';
-    if (activeChat !== 'global') {
+    if (isGroup) {
+      messagesNode = `group_messages/${activeChat}`;
+    } else if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
       messagesNode = `direct_messages/${ids[0]}_${ids[1]}`;
     }
@@ -1100,13 +1199,16 @@ export default function ChatPage({ user }: { user: any }) {
   const sendVoiceMessage = async (base64Audio: string) => {
     if (!base64Audio) return;
 
-    if (activeChat !== 'global' && !connections[activeChat]) {
+    const isGroup = groups.some(g => g.id === activeChat);
+    if (activeChat !== 'global' && !isGroup && !connections[activeChat]) {
       setError("Cannot send voice message. You must be connected with this author to send messages.");
       return;
     }
 
     let messagesNode = 'messages';
-    if (activeChat !== 'global') {
+    if (isGroup) {
+      messagesNode = `group_messages/${activeChat}`;
+    } else if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
       messagesNode = `direct_messages/${ids[0]}_${ids[1]}`;
     }
@@ -1134,8 +1236,11 @@ export default function ChatPage({ user }: { user: any }) {
 
   // Toggle quick reactions on any message
   const handleToggleReaction = async (msgId: string, emoji: string) => {
+    const isGroup = groups.some(g => g.id === activeChat);
     let messagesNode = 'messages';
-    if (activeChat !== 'global') {
+    if (isGroup) {
+      messagesNode = `group_messages/${activeChat}`;
+    } else if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
       messagesNode = `direct_messages/${ids[0]}_${ids[1]}`;
     }
@@ -1157,8 +1262,11 @@ export default function ChatPage({ user }: { user: any }) {
 
   // Delete option on messages sent by user
   const handleDeleteMessage = async (msgId: string) => {
+    const isGroup = groups.some(g => g.id === activeChat);
     let messagesNode = 'messages';
-    if (activeChat !== 'global') {
+    if (isGroup) {
+      messagesNode = `group_messages/${activeChat}`;
+    } else if (activeChat !== 'global') {
       const ids = [user.uid, activeChat].sort();
       messagesNode = `direct_messages/${ids[0]}_${ids[1]}`;
     }
@@ -1279,13 +1387,23 @@ export default function ChatPage({ user }: { user: any }) {
         {/* Chat List Header */}
         <div className="p-4 md:p-5 border-b border-neutral-200">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold font-serif tracking-tight text-neutral-900 flex items-center">
+            <h2 className="text-xl font-bold font-serif tracking-tight text-neutral-900 flex items-center select-none">
               <MessagesSquare className="w-5 h-5 mr-2.5 text-indigo-500" />
               Messenger
             </h2>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-[11px] font-semibold tracking-wider text-indigo-600 rounded-full uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-              Live
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 border border-indigo-100 text-[10px] font-semibold tracking-wider text-indigo-600 rounded-full uppercase select-none shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                Live
+              </div>
+              <button
+                onClick={() => setShowCreateGroupModal(true)}
+                className="w-7 h-7 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-full transition-all flex items-center justify-center shadow-sm cursor-pointer shrink-0"
+                title="Create Group Chat"
+                id="create-group-plus-btn"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -1380,30 +1498,47 @@ export default function ChatPage({ user }: { user: any }) {
             </div>
           ) : (
             <>
-              {/* Global Group Chat */}
-              <button
-                onClick={() => setActiveChat('global')}
-                id="chat-item-global"
-                className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all ${
-                  activeChat === 'global' 
-                    ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
-                    : 'hover:bg-neutral-100 text-neutral-700'
-                }`}
-              >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center mr-3 shrink-0 shadow-md relative">
-                  <Users className="w-5 h-5" />
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></span>
+              {/* Group Chats Section */}
+              <div className="px-3 pt-2 pb-1 flex items-center justify-between select-none">
+                <h3 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Group Chats</h3>
+              </div>
+
+              {groups.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-neutral-450 font-medium text-center bg-neutral-100/50 rounded-xl mx-2 border border-dashed border-neutral-200 select-none">
+                  No group chats yet. Click <Plus className="inline w-3 h-3 mx-0.5 mb-0.5 text-indigo-500" /> to create one!
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`font-bold text-sm flex items-center justify-between ${activeChat === 'global' ? 'text-indigo-950' : 'text-neutral-800'}`}>
-                    <span>Community Lounge</span>
-                  </div>
-                  <p className="text-xs text-neutral-500 truncate mt-0.5">Public board for everyone</p>
-                </div>
-              </button>
+              ) : (
+                groups.map((g) => {
+                  const isSelected = activeChat === g.id;
+                  return (
+                    <button
+                      key={g.id}
+                      onClick={() => setActiveChat(g.id)}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center transition-all ${
+                        isSelected 
+                          ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
+                          : 'hover:bg-neutral-100 text-neutral-700'
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-700 text-white flex items-center justify-center mr-3 shrink-0 shadow-md relative">
+                        <Users className="w-5 h-5" />
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-indigo-450 border-2 border-white shadow-sm"></span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`font-bold text-sm tracking-tight truncate ${isSelected ? 'text-indigo-950' : 'text-neutral-800'}`}>
+                          {g.name}
+                        </div>
+                        <p className="text-[11px] text-neutral-400 truncate mt-0.5">
+                          {Object.keys(g.members || {}).length} members
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
 
               {/* Divider */}
-              <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+              <div className="px-3 pt-4 pb-1 flex items-center justify-between border-t border-neutral-200/40 mt-3 select-none">
                 <h3 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Writers</h3>
               </div>
               
@@ -1498,8 +1633,12 @@ export default function ChatPage({ user }: { user: any }) {
               <ArrowLeft className="w-5 h-5" />
             </button>
 
-            <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 relative overflow-hidden border border-neutral-200">
-              {activeChat === 'global' ? (
+            <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 relative overflow-hidden border border-neutral-200 shadow-sm">
+              {groups.some(g => g.id === activeChat) ? (
+                <div className="w-full h-full bg-gradient-to-tr from-indigo-500 to-indigo-700 text-white flex items-center justify-center">
+                  <Users className="w-5 h-5" />
+                </div>
+              ) : activeChat === 'global' ? (
                 <div className="w-full h-full bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
                   <Users className="w-5 h-5" />
                 </div>
@@ -1511,21 +1650,31 @@ export default function ChatPage({ user }: { user: any }) {
                 </div>
               )}
             </div>
-            <div>
-              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900">
-                {activeChat === 'global' ? 'Community Chat' : `${activeUserObj?.displayName}`}
+            <div className="min-w-0 flex-1">
+              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900 truncate">
+                {groups.some(g => g.id === activeChat) ? (groups.find(g => g.id === activeChat)?.name) : activeChat === 'global' ? 'Community Chat' : `${activeUserObj?.displayName || 'Chat'}`}
               </h1>
               <div className="flex items-center gap-2">
-                <p className="text-xs text-neutral-500">
-                  {activeChat === 'global' 
-                    ? 'Connect with all authors and readers.' 
-                    : isUserOnline(activeUserObj?.lastSeen) ? 'Online now' : 'Offline'
-                  }
-                </p>
-                {activeChat !== 'global' && (
+                <div className="text-xs text-neutral-500 truncate max-w-[180px] sm:max-w-md select-none">
+                  {groups.some(g => g.id === activeChat) ? (
+                    (() => {
+                      const grp = groups.find(g => g.id === activeChat);
+                      const membersName = Object.keys(grp?.members || {})
+                        .map(uid => usersInfo.find(u => u.uid === uid)?.displayName || (uid === user.uid ? 'You' : 'Unknown'))
+                        .filter(Boolean)
+                        .join(', ');
+                      return `Members: ${membersName}`;
+                    })()
+                  ) : activeChat === 'global' ? (
+                    'Connect with all authors and readers.'
+                  ) : (
+                    isUserOnline(activeUserObj?.lastSeen) ? 'Online now' : 'Offline'
+                  )}
+                </div>
+                {!groups.some(g => g.id === activeChat) && activeChat !== 'global' && activeChat && (
                   <Link 
                     to={`/profile/${activeChat}`}
-                    className="text-[10px] bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full font-bold hover:bg-neutral-200 transition-colors"
+                    className="text-[10px] bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full font-bold hover:bg-neutral-200 transition-colors shrink-0"
                   >
                     View Profile
                   </Link>
@@ -1535,7 +1684,7 @@ export default function ChatPage({ user }: { user: any }) {
           </div>
 
           {/* Action Call & Block Toolbar for private chat */}
-          {activeChat !== 'global' && activeUserObj && connections[activeChat] && (
+          {activeChat !== 'global' && !groups.some(g => g.id === activeChat) && activeUserObj && connections[activeChat] && (
             <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
               <button
                 onClick={() => handleToggleBlock(activeChat)}
@@ -1658,7 +1807,31 @@ export default function ChatPage({ user }: { user: any }) {
           chatBgColor === 'dark' ? 'bg-neutral-900 border-x border-neutral-800' :
           'bg-neutral-50/50'
         }`}>
-          {activeChat !== 'global' && !connections[activeChat] ? (
+          {!activeChat ? (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500 select-none">
+              <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-indigo-700 rounded-2xl flex items-center justify-center mb-6 shadow-lg transform rotate-12">
+                <MessagesSquare className="w-8 h-8 text-white" />
+              </div>
+              
+              <h3 className="text-xl font-bold text-neutral-900 mb-2 font-serif">
+                No Chat Selected
+              </h3>
+              
+              <p className="text-sm text-neutral-500 max-w-sm mb-6 leading-relaxed">
+                Choose an author from the list to start direct messaging, or click the plus button to create a new private group chat!
+              </p>
+
+              {requestTab === 'chats' && (
+                <button
+                  onClick={() => setShowCreateGroupModal(true)}
+                  className="inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold rounded-xl text-xs transition-all shadow-md cursor-pointer gap-2"
+                >
+                  <Plus className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Create Group Chat</span>
+                </button>
+              )}
+            </div>
+          ) : activeChat !== 'global' && !groups.some(g => g.id === activeChat) && !connections[activeChat] ? (
             <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
               <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6 border border-amber-100">
                 {activeChatConnStatus === 'pending' ? (
@@ -1740,13 +1913,35 @@ export default function ChatPage({ user }: { user: any }) {
               <div className="w-8 h-8 border-4 border-neutral-200 border-t-indigo-500 rounded-full animate-spin"></div>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-neutral-400 space-y-2">
+            <div className="flex flex-col items-center justify-center h-full text-neutral-400 space-y-2 select-none">
               <MessageSquare className="w-10 h-10 text-neutral-305" />
-              <p className="text-sm font-serif">Empty dialog queue. Be the first to start!</p>
+              <p className="text-xs font-serif font-semibold tracking-wide text-neutral-450 uppercase">
+                {groups.some(g => g.id === activeChat) 
+                  ? "👋 Welcome group members!" 
+                  : "Empty dialog queue"
+                }
+              </p>
+              <p className="text-sm text-neutral-400">
+                {groups.some(g => g.id === activeChat) 
+                  ? "Be the first to share your thoughts in this newly formed group!" 
+                  : "Send a friendly greeting to start your conversation!"
+                }
+              </p>
             </div>
           ) : (
             // Filter messages: if we blocked them, do not show their messages in community chat too (or show clearly)
             messages.map((msg, index) => {
+              if (msg.authorId === 'system') {
+                return (
+                  <div key={msg.id} className="flex justify-center my-2 animate-in fade-in duration-300 select-none">
+                    <div className="bg-neutral-100 text-neutral-500 border border-neutral-200/50 rounded-full px-4 py-1.5 text-xs font-semibold shadow-sm flex items-center gap-1.5 max-w-sm text-center">
+                      <MessageSquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>{msg.text}</span>
+                    </div>
+                  </div>
+                );
+              }
+
               const isMe = msg.authorId === user.uid;
               const isSenderBlocked = !!blockedUsers[msg.authorId];
               
@@ -1913,185 +2108,317 @@ export default function ChatPage({ user }: { user: any }) {
         </div>
 
         {/* Input Bar */}
-        <div className="bg-white border-t border-neutral-200 p-4 shrink-0 relative">
-          
-          {/* Blocking Banner Cover */}
-          {isSelectedChatBlocked ? (
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-              <div>
-                <h4 className="text-sm font-semibold text-rose-700">This User is Blocked</h4>
-                <p className="text-xs text-neutral-500 mt-0.5">Unblock to start direct lines of communication, view metadata, or connect audio dials.</p>
-              </div>
-              <button
-                onClick={() => handleToggleBlock(activeChat)}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg cursor-pointer select-none transition-all"
-              >
-                Unblock Writer
-              </button>
-            </div>
-          ) : (activeChat === 'global' || connections[activeChat]) ? (
-            <form onSubmit={handleSend} className="flex items-end gap-2 relative">
-              
-              <div className="relative">
-                {/* Improved Emoji Picker Icon Button */}
+        {activeChat && (
+          <div className="bg-white border-t border-neutral-200 p-4 shrink-0 relative">
+            
+            {/* Blocking Banner Cover */}
+            {isSelectedChatBlocked ? (
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                <div>
+                  <h4 className="text-sm font-semibold text-rose-700">This User is Blocked</h4>
+                  <p className="text-xs text-neutral-500 mt-0.5">Unblock to start direct lines of communication, view metadata, or connect audio dials.</p>
+                </div>
                 <button
-                  type="button"
-                  onClick={() => setShowEmojis(!showEmojis)}
-                  className={`p-3 rounded-full transition-all shrink-0 cursor-pointer ${
-                    showEmojis ? 'text-indigo-600 bg-neutral-100' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
-                  }`}
-                  title="Emoji Store"
+                  onClick={() => handleToggleBlock(activeChat)}
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg cursor-pointer select-none transition-all"
                 >
-                  <Smile className="w-5 h-5" />
+                  Unblock Writer
                 </button>
+              </div>
+            ) : (activeChat === 'global' || groups.some(g => g.id === activeChat) || connections[activeChat]) ? (
+              <form onSubmit={handleSend} className="flex items-end gap-2 relative">
+                
+                <div className="relative">
+                  {/* Improved Emoji Picker Icon Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojis(!showEmojis)}
+                    className={`p-3 rounded-full transition-all shrink-0 cursor-pointer ${
+                      showEmojis ? 'text-indigo-600 bg-neutral-100' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
+                    }`}
+                    title="Emoji Store"
+                  >
+                    <Smile className="w-5 h-5" />
+                  </button>
 
-                {/* 🌟 OVERHAULED CATEGORIZED & SEARCHABLE EMOJI DRAWER */}
-                {showEmojis && (
-                  <div id="emoji-picker-drawer" className="absolute bottom-full left-0 mb-3 bg-white border border-neutral-200 shadow-2xl rounded-2xl p-3.5 w-72 sm:w-80 z-20 flex flex-col text-neutral-900 animate-slide-up">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-bold tracking-widest text-indigo-600 uppercase">Express Yourself</span>
-                      <button 
-                        type="button" 
-                        onClick={() => { setShowEmojis(false); setEmojiSearch(''); }} 
-                        className="p-1 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-neutral-900 transition-colors"
+                  {/* 🌟 OVERHAULED CATEGORIZED & SEARCHABLE EMOJI DRAWER */}
+                  {showEmojis && (
+                    <div id="emoji-picker-drawer" className="absolute bottom-full left-0 mb-3 bg-white border border-neutral-200 shadow-2xl rounded-2xl p-3.5 w-72 sm:w-80 z-20 flex flex-col text-neutral-900 animate-slide-up">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-bold tracking-widest text-indigo-600 uppercase">Express Yourself</span>
+                        <button 
+                          type="button" 
+                          onClick={() => { setShowEmojis(false); setEmojiSearch(''); }} 
+                          className="p-1 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-neutral-900 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Emoji Category Search Input */}
+                      <div className="relative mb-3">
+                        <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-2.5" />
+                        <input
+                          type="text"
+                          value={emojiSearch}
+                          onChange={(e) => setEmojiSearch(e.target.value)}
+                          placeholder="Search emoji (e.g. smile)..."
+                          className="w-full bg-neutral-50 text-xs py-2 pl-8 pr-4 rounded-lg border border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Tabs row */}
+                      <div className="flex gap-1 border-b border-neutral-100 pb-2 mb-2 justify-between">
+                        {['All', 'Smileys', 'Gestures', 'Symbols'].map((tab) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => { setActiveEmojiTab(tab as any); }}
+                            className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded font-semibold transition-all cursor-pointer ${
+                              activeEmojiTab === tab 
+                                ? 'bg-indigo-50 border border-indigo-200 text-indigo-600' 
+                                : 'text-neutral-400 hover:text-neutral-900'
+                            }`}
+                          >
+                            {tab}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Emojis Grid display */}
+                      <div className="grid grid-cols-6 gap-1 h-44 overflow-y-auto scrollbar-none pr-1">
+                        {filteredEmojis.map(emoji => (
+                          <button
+                            key={emoji.char}
+                            type="button"
+                            onClick={() => insertEmoji(emoji.char)}
+                            className="text-xl hover:bg-neutral-100 p-1 rounded-lg transition-transform hover:scale-125 cursor-pointer flex items-center justify-center animate-fade-in"
+                            title={emoji.keywords}
+                          >
+                            {emoji.char}
+                          </button>
+                        ))}
+                        {filteredEmojis.length === 0 && (
+                          <div className="col-span-6 flex flex-col justify-center items-center h-full text-neutral-450 text-xs">
+                            No matching emojis
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Voice Message Mic Button */}
+                {!isRecordingVoice && (
+                  <button
+                    type="button"
+                    onClick={startVoiceRecording}
+                    className="p-3 text-neutral-500 hover:text-indigo-600 hover:bg-neutral-100 rounded-full transition-all shrink-0 cursor-pointer"
+                    title="Record voice message"
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                )}
+
+                {isRecordingVoice ? (
+                  <div className="flex-1 flex items-center justify-between bg-rose-50 border border-rose-200 rounded-2xl py-2.5 px-4 animate-pulse">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping shrink-0" />
+                      <span className="text-xs font-bold text-rose-800 tracking-wide font-sans">Recording...</span>
+                      <span className="font-mono text-xs font-bold text-rose-900 bg-rose-100 px-2 py-0.5 rounded-lg select-none">
+                        {formatTime(voiceSeconds)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => stopVoiceRecording(false)}
+                        className="p-2 text-rose-600 hover:bg-rose-100 hover:text-rose-700 active:scale-95 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                        title="Discard Voice Message"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4.5 h-4.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => stopVoiceRecording(true)}
+                        className="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer leading-none px-3 font-semibold"
+                        title="Send Voice Message"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span className="text-xs font-bold font-sans">Send</span>
                       </button>
                     </div>
-
-                    {/* Emoji Category Search Input */}
-                    <div className="relative mb-3">
-                      <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-2.5" />
-                      <input
-                        type="text"
-                        value={emojiSearch}
-                        onChange={(e) => setEmojiSearch(e.target.value)}
-                        placeholder="Search emoji (e.g. smile)..."
-                        className="w-full bg-neutral-50 text-xs py-2 pl-8 pr-4 rounded-lg border border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    {/* Tabs row */}
-                    <div className="flex gap-1 border-b border-neutral-100 pb-2 mb-2 justify-between">
-                      {['All', 'Smileys', 'Gestures', 'Symbols'].map((tab) => (
-                        <button
-                          key={tab}
-                          type="button"
-                          onClick={() => { setActiveEmojiTab(tab as any); }}
-                          className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded font-semibold transition-all cursor-pointer ${
-                            activeEmojiTab === tab 
-                              ? 'bg-indigo-50 border border-indigo-200 text-indigo-600' 
-                              : 'text-neutral-400 hover:text-neutral-900'
-                          }`}
-                        >
-                          {tab}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Emojis Grid display */}
-                    <div className="grid grid-cols-6 gap-1 h-44 overflow-y-auto scrollbar-none pr-1">
-                      {filteredEmojis.map(emoji => (
-                        <button
-                          key={emoji.char}
-                          type="button"
-                          onClick={() => insertEmoji(emoji.char)}
-                          className="text-xl hover:bg-neutral-100 p-1 rounded-lg transition-transform hover:scale-125 cursor-pointer flex items-center justify-center animate-fade-in"
-                          title={emoji.keywords}
-                        >
-                          {emoji.char}
-                        </button>
-                      ))}
-                      {filteredEmojis.length === 0 && (
-                        <div className="col-span-6 flex flex-col justify-center items-center h-full text-neutral-450 text-xs">
-                          No matching emojis
-                        </div>
-                      )}
-                    </div>
                   </div>
+                ) : (
+                  <>
+                    {/* Chat Input Text Box */}
+                    <textarea
+                      value={newMessage}
+                      onChange={(e) => {
+                        setNewMessage(e.target.value);
+                        handleSelfTyping();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend(e);
+                        }
+                      }}
+                      placeholder={
+                        groups.some(g => g.id === activeChat) 
+                          ? `Write message to ${groups.find(g => g.id === activeChat)?.name}...`
+                          : activeChat === 'global' 
+                            ? "Write message to global channel... (Press Enter to send)" 
+                            : `Write direct message to ${activeUserObj?.displayName || 'Author'}...`
+                      }
+                      className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px]"
+                      rows={1}
+                    />
+
+                    {/* Send Button */}
+                    <button
+                      type="submit"
+                      disabled={!newMessage.trim()}
+                      className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-100 disabled:text-neutral-400 disabled:opacity-45 text-white rounded-full transition-all shrink-0 mb-1 cursor-pointer hover:shadow shadow active:scale-95 flex items-center justify-center"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
+              </form>
+            ) : (
+              <div className="max-w-4xl mx-auto py-3 px-4 bg-amber-50/50 rounded-2xl border border-amber-200/50 text-center flex items-center justify-center gap-2 mb-2">
+                 <Lock className="w-4 h-4 text-amber-500" />
+                 <p className="text-xs font-bold text-amber-700 uppercase tracking-widest italic">Connection Required - View profile to connect</p>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
+
+      {/* 👥 CREATE GROUP CHAT MODAL */}
+      {showCreateGroupModal && (
+        <div id="create-group-modal-portal" className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in animate-duration-200">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl border border-neutral-150 animate-zoom-in animate-duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
+                  <Users className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-neutral-900">Create Private Group</h3>
+                  <p className="text-[11px] text-neutral-400 font-medium tracking-tight">Gather your peer writers and editors</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowCreateGroupModal(false);
+                  setGroupName('');
+                  setSelectedMembers([]);
+                }}
+                className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-900 transition-all cursor-pointer animate-fade-in"
+                title="Dismiss Dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              {/* Group Name input field */}
+              <div>
+                <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 select-none">Group Subject / Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Literary Salon, SciFi Collab"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  className="w-full bg-white text-sm py-2.5 px-4 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-neutral-900 placeholder-neutral-400 font-medium tracking-tight"
+                />
               </div>
 
-              {/* Voice Message Mic Button */}
-              {!isRecordingVoice && (
+              {/* Members Selection List wrapper */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-2 select-none">
+                  Select Members ({selectedMembers.length})
+                </label>
+                
+                {/* Scrollable listing of connected/non-blocked users */}
+                <div className="border border-neutral-150 rounded-2xl max-h-48 overflow-y-auto p-1.5 space-y-1 bg-neutral-50/50">
+                  {usersInfo.filter(u => u.uid !== user.uid && connections[u.uid]).length === 0 ? (
+                    <div className="text-center py-6 px-4 select-none">
+                      <UserCheck className="w-8 h-8 text-neutral-250 mx-auto mb-2" />
+                      <p className="text-xs text-neutral-505 font-medium">No active connections found</p>
+                      <p className="text-[10px] text-neutral-400 mt-1 leading-relaxed">You must connect with other writers first before initiating a group chat!</p>
+                    </div>
+                  ) : (
+                    usersInfo
+                      .filter(u => u.uid !== user.uid && connections[u.uid])
+                      .map((u) => {
+                        const isChecked = selectedMembers.includes(u.uid);
+                        return (
+                          <div 
+                            key={u.uid}
+                            onClick={() => toggleMember(u.uid)}
+                            className={`flex items-center justify-between p-2 rounded-xl cursor-pointer select-none border transition-all ${
+                              isChecked 
+                                ? 'bg-indigo-50/50 border-indigo-200 text-indigo-950' 
+                                : 'bg-white border-transparent hover:bg-neutral-100 text-neutral-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-neutral-100 overflow-hidden border border-neutral-150 shrink-0">
+                                {u.photoURL ? (
+                                  <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full bg-neutral-200 flex items-center justify-center text-xs font-bold text-neutral-500">
+                                    {u.displayName.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-xs font-bold truncate">{u.displayName}</span>
+                            </div>
+                            
+                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                              isChecked 
+                                ? 'bg-indigo-600 border-indigo-600 text-white' 
+                                : 'border-neutral-300 bg-white'
+                            }`}>
+                              {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+
+              {/* Primary Dialog action footer */}
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={startVoiceRecording}
-                  className="p-3 text-neutral-500 hover:text-indigo-600 hover:bg-neutral-100 rounded-full transition-all shrink-0 cursor-pointer"
-                  title="Record voice message"
+                  onClick={() => {
+                    setShowCreateGroupModal(false);
+                    setGroupName('');
+                    setSelectedMembers([]);
+                  }}
+                  className="flex-1 py-2.5 border border-neutral-200 hover:bg-neutral-100 active:scale-95 text-neutral-600 text-xs font-bold rounded-xl transition-all cursor-pointer"
                 >
-                  <Mic className="w-5 h-5" />
+                  Cancel
                 </button>
-              )}
-
-              {isRecordingVoice ? (
-                <div className="flex-1 flex items-center justify-between bg-rose-50 border border-rose-200 rounded-2xl py-2.5 px-4 animate-pulse">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping shrink-0" />
-                    <span className="text-xs font-bold text-rose-800 tracking-wide font-sans">Recording...</span>
-                    <span className="font-mono text-xs font-bold text-rose-900 bg-rose-100 px-2 py-0.5 rounded-lg select-none">
-                      {formatTime(voiceSeconds)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => stopVoiceRecording(false)}
-                      className="p-2 text-rose-600 hover:bg-rose-100 hover:text-rose-700 active:scale-95 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-                      title="Discard Voice Message"
-                    >
-                      <Trash2 className="w-4.5 h-4.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => stopVoiceRecording(true)}
-                      className="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer leading-none px-3 font-semibold"
-                      title="Send Voice Message"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span className="text-xs font-bold font-sans">Send</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Chat Input Text Box */}
-                  <textarea
-                    value={newMessage}
-                    onChange={(e) => {
-                      setNewMessage(e.target.value);
-                      handleSelfTyping();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend(e);
-                      }
-                    }}
-                    placeholder={activeChat === 'global' ? "Write message to global channel... (Press Enter to send)" : `Write direct message to ${activeUserObj?.displayName || 'Author'}...`}
-                    className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px]"
-                    rows={1}
-                  />
-
-                  {/* Send Button */}
-                  <button
-                    type="submit"
-                    disabled={!newMessage.trim()}
-                    className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-100 disabled:text-neutral-400 disabled:opacity-45 text-white rounded-full transition-all shrink-0 mb-1 cursor-pointer hover:shadow shadow active:scale-95 flex items-center justify-center"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </form>
-          ) : (
-            <div className="max-w-4xl mx-auto py-3 px-4 bg-amber-50/50 rounded-2xl border border-amber-200/50 text-center flex items-center justify-center gap-2 mb-2">
-               <Lock className="w-4 h-4 text-amber-500" />
-               <p className="text-xs font-bold text-amber-700 uppercase tracking-widest italic">Connection Required - View profile to connect</p>
+                <button
+                  type="button"
+                  onClick={handleCreateGroup}
+                  disabled={!groupName.trim() || selectedMembers.length === 0}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-neutral-100 disabled:text-neutral-400 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>Create Chat</span>
+                </button>
+              </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
