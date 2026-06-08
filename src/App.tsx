@@ -86,6 +86,7 @@ export default function App() {
           <Route path="/post/:id" element={<PostPage user={user} />} />
           <Route path="/chat" element={<ChatPage user={user} />} />
           <Route path="/profile" element={<ProfilePage user={user} />} />
+          <Route path="/profile/:userId" element={<ProfilePage user={user} />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

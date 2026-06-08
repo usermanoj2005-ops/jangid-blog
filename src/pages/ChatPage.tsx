@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
   ref, 
   onValue, 
@@ -15,6 +15,7 @@ import {
   Smile, 
   Users, 
   User, 
+  UserPlus,
   MessagesSquare, 
   MessageSquare,
   Phone, 
@@ -225,6 +226,11 @@ export default function ChatPage({ user }: { user: any }) {
   const [userSearchText, setUserSearchText] = useState('');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
 
+  // Connection and Request states
+  const [connections, setConnections] = useState<Record<string, boolean>>({});
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [requestTab, setRequestTab] = useState<'chats' | 'requests'>('chats');
+
   // Switch to chat view automatically when activeChat changes on mobile
   useEffect(() => {
     if (activeChat) {
@@ -232,7 +238,56 @@ export default function ChatPage({ user }: { user: any }) {
     }
   }, [activeChat]);
 
+  // Fetch connections
+  useEffect(() => {
+    const connRef = ref(rtdb, `connections/${user.uid}`);
+    const unsubscribe = onValue(connRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setConnections(snapshot.val());
+      } else {
+        setConnections({});
+      }
+    });
+    return () => unsubscribe();
+  }, [user.uid]);
 
+  // Fetch incoming requests
+  useEffect(() => {
+    const reqRef = ref(rtdb, `chat_requests/${user.uid}`);
+    const unsubscribe = onValue(reqRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const reqs = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        }));
+        setIncomingRequests(reqs);
+      } else {
+        setIncomingRequests([]);
+      }
+    });
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  const handleAcceptRequest = async (senderId: string) => {
+    try {
+      await update(ref(rtdb), {
+        [`connections/${user.uid}/${senderId}`]: true,
+        [`connections/${senderId}/${user.uid}`]: true
+      });
+      await remove(ref(rtdb, `chat_requests/${user.uid}/${senderId}`));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeclineRequest = async (senderId: string) => {
+    try {
+      await remove(ref(rtdb, `chat_requests/${user.uid}/${senderId}`));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Handle load-time search params parameter for selecting specific user
   useEffect(() => {
@@ -885,105 +940,178 @@ export default function ChatPage({ user }: { user: any }) {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold font-serif tracking-tight text-neutral-900 flex items-center">
               <MessagesSquare className="w-5 h-5 mr-2.5 text-indigo-500" />
-              Direct Messages
+              Messenger
             </h2>
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-[11px] font-semibold tracking-wider text-indigo-600 rounded-full uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-              Live Online
+              Live
             </div>
           </div>
 
-          {/* Search Contacts */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              id="user-search-input"
-              value={userSearchText}
-              onChange={(e) => setUserSearchText(e.target.value)}
-              placeholder="Search people..."
-              className="w-full bg-white text-sm py-2 pl-9 pr-4 rounded-xl border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-neutral-900 placeholder-neutral-450"
-            />
-            {userSearchText && (
-              <button onClick={() => setUserSearchText('')} className="absolute right-3 top-2.5 text-neutral-400 hover:text-neutral-900">
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          {/* Tabs for Chats vs Requests */}
+          <div className="flex bg-neutral-100 p-1 rounded-xl mb-4">
+            <button
+              onClick={() => setRequestTab('chats')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                requestTab === 'chats' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
+              }`}
+            >
+              Chats
+            </button>
+            <button
+              onClick={() => setRequestTab('requests')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all relative ${
+                requestTab === 'requests' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
+              }`}
+            >
+              Requests
+              {incomingRequests.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                  {incomingRequests.length}
+                </span>
+              )}
+            </button>
           </div>
 
-
+          {/* Search Contacts (Only show in chats tab) */}
+          {requestTab === 'chats' && (
+            <div className="relative">
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                id="user-search-input"
+                value={userSearchText}
+                onChange={(e) => setUserSearchText(e.target.value)}
+                placeholder="Search authors..."
+                className="w-full bg-white text-sm py-2 pl-9 pr-4 rounded-xl border border-neutral-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-neutral-900 placeholder-neutral-400 font-medium"
+              />
+              {userSearchText && (
+                <button onClick={() => setUserSearchText('')} className="absolute right-3 top-2.5 text-neutral-400 hover:text-neutral-900">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Chats / Users Queue */}
         <div id="users-sidebar-scroll" className="flex-1 overflow-y-auto scrollbar-none p-2 space-y-1">
-          {/* Global Group Chat */}
-          <button
-            onClick={() => setActiveChat('global')}
-            id="chat-item-global"
-            className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all ${
-              activeChat === 'global' 
-                ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
-                : 'hover:bg-neutral-100 text-neutral-700'
-            }`}
-          >
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center mr-3 shrink-0 shadow-md relative">
-              <Users className="w-5 h-5" />
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow"></span>
+          {requestTab === 'requests' ? (
+            <div className="space-y-2 p-1">
+              {incomingRequests.length === 0 ? (
+                <div className="text-center py-10">
+                  <UserPlus className="w-10 h-10 text-neutral-200 mx-auto mb-3" />
+                  <p className="text-xs text-neutral-400 font-medium">No pending requests</p>
+                </div>
+              ) : (
+                incomingRequests.map((req) => (
+                  <div key={req.id} className="bg-white border border-neutral-200 p-3 rounded-xl shadow-sm">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center overflow-hidden border border-neutral-100">
+                        {req.senderPhoto ? (
+                          <img src={req.senderPhoto} alt={req.senderName} className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-5 h-5 text-neutral-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-neutral-900 truncate">{req.senderName}</p>
+                        <p className="text-[10px] text-neutral-500 font-medium tracking-tight">wants to connect</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleAcceptRequest(req.senderId)}
+                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleDeclineRequest(req.senderId)}
+                        className="flex-1 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className={`font-semibold text-sm flex items-center justify-between ${activeChat === 'global' ? 'text-indigo-950' : 'text-neutral-800'}`}>
-                <span>Community Chat</span>
-              </div>
-              <p className="text-xs text-neutral-500 truncate mt-0.5">Public bulletin group</p>
-            </div>
-          </button>
-
-          {/* Divider */}
-          <div className="px-3 pt-3 pb-1">
-            <h3 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Active Authors</h3>
-          </div>
-          
-          {sortedUsers.map((u) => {
-            const hasBlockedThisUser = !!blockedUsers[u.uid];
-            const isOnline = isUserOnline(u.lastSeen);
-
-            return (
+          ) : (
+            <>
+              {/* Global Group Chat */}
               <button
-                key={u.uid}
-                onClick={() => setActiveChat(u.uid)}
-                id={`chat-item-${u.uid}`}
+                onClick={() => setActiveChat('global')}
+                id="chat-item-global"
                 className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all ${
-                  activeChat === u.uid 
+                  activeChat === 'global' 
                     ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
                     : 'hover:bg-neutral-100 text-neutral-700'
                 }`}
               >
-                <div className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-200">
-                  {u.photoURL ? (
-                    <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-tr from-indigo-550/10 to-violet-550/10 flex items-center justify-center text-sm font-bold text-indigo-600">
-                      {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
-                    </div>
-                  )}
-                  {isOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow"></span>
-                  )}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white flex items-center justify-center mr-3 shrink-0 shadow-md relative">
+                  <Users className="w-5 h-5" />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={`font-semibold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-indigo-950' : 'text-neutral-850'}`}>
-                    <span className="truncate">{u.displayName}</span>
-                    {hasBlockedThisUser && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-rose-50 border border-rose-200 text-rose-600 font-semibold rounded-md font-sans">Blocked</span>
-                    )}
+                  <div className={`font-bold text-sm flex items-center justify-between ${activeChat === 'global' ? 'text-indigo-950' : 'text-neutral-800'}`}>
+                    <span>Community Lounge</span>
                   </div>
-                  <p className="text-xs text-neutral-400 truncate mt-0.5">
-                    {isOnline ? 'Online' : 'Offline'}
-                  </p>
+                  <p className="text-xs text-neutral-500 truncate mt-0.5">Public board for everyone</p>
                 </div>
               </button>
-            );
-          })}
+
+              {/* Divider */}
+              <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+                <h3 className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Writers</h3>
+              </div>
+              
+              {sortedUsers.map((u) => {
+                const isOnline = isUserOnline(u.lastSeen);
+                const isConnected = !!connections[u.uid];
+
+                return (
+                  <button
+                    key={u.uid}
+                    onClick={() => setActiveChat(u.uid)}
+                    id={`chat-item-${u.uid}`}
+                    className={`w-full text-left px-3 py-3 rounded-xl flex items-center transition-all group ${
+                      activeChat === u.uid 
+                        ? 'bg-indigo-50 text-indigo-950 border border-indigo-200/50' 
+                        : 'hover:bg-neutral-100 text-neutral-700'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-neutral-150 text-neutral-500 flex items-center justify-center mr-3 shrink-0 relative overflow-hidden border border-neutral-100">
+                      {u.photoURL ? (
+                        <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-tr from-indigo-50 to-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-500">
+                          {u.displayName?.trim().charAt(0).toUpperCase() || 'U'}
+                        </div>
+                      )}
+                      {isOnline && (
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-bold text-sm flex items-center justify-between ${activeChat === u.uid ? 'text-indigo-950' : 'text-neutral-850'}`}>
+                        <span className="truncate">{u.displayName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-xs text-neutral-400 truncate">
+                          {isOnline ? 'Online' : 'Offline'}
+                        </p>
+                        {!isConnected && (
+                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.25 rounded border border-amber-100 font-semibold tracking-tighter">Request needed</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>
           
           {sortedUsers.length === 0 && (
             <div className="px-3 py-6 text-xs text-neutral-500 text-center">
@@ -991,7 +1119,6 @@ export default function ChatPage({ user }: { user: any }) {
             </div>
           )}
         </div>
-      </div>
 
       {/* Main Chat Area */}
       <div className={`flex-1 flex flex-col min-w-0 bg-white ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
@@ -1025,17 +1152,27 @@ export default function ChatPage({ user }: { user: any }) {
               <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900">
                 {activeChat === 'global' ? 'Community Chat' : `${activeUserObj?.displayName}`}
               </h1>
-              <p className="text-xs text-neutral-500">
-                {activeChat === 'global' 
-                  ? 'Connect with all authors and readers.' 
-                  : isUserOnline(activeUserObj?.lastSeen) ? 'Online now' : 'Offline'
-                }
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-neutral-500">
+                  {activeChat === 'global' 
+                    ? 'Connect with all authors and readers.' 
+                    : isUserOnline(activeUserObj?.lastSeen) ? 'Online now' : 'Offline'
+                  }
+                </p>
+                {activeChat !== 'global' && (
+                  <Link 
+                    to={`/profile/${activeChat}`}
+                    className="text-[10px] bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full font-bold hover:bg-neutral-200 transition-colors"
+                  >
+                    View Profile
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Action Call & Block Toolbar for private chat */}
-          {activeChat !== 'global' && activeUserObj && (
+          {activeChat !== 'global' && activeUserObj && connections[activeChat] && (
             <div className="flex items-center gap-2">
               <button
                 onClick={handleInitiateCall}
@@ -1146,7 +1283,23 @@ export default function ChatPage({ user }: { user: any }) {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto scrollbar-none p-4 md:p-6 space-y-6 bg-neutral-50/50">
-          {loading ? (
+          {activeChat !== 'global' && !connections[activeChat] ? (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
+              <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6 border border-amber-100">
+                <Lock className="w-10 h-10 text-amber-500" />
+              </div>
+              <h3 className="text-xl font-bold text-neutral-900 mb-2 font-serif">Connection Required</h3>
+              <p className="text-sm text-neutral-500 max-w-xs mb-8 leading-relaxed">
+                Private messaging is only available between authors who have connected. Start by viewing their profile and sending a request.
+              </p>
+              <Link 
+                to={`/profile/${activeChat}`}
+                className="inline-flex items-center gap-2 px-8 py-3 bg-neutral-900 text-white rounded-xl text-sm font-bold shadow-lg shadow-neutral-200 hover:bg-neutral-800 transition-all active:scale-95"
+              >
+                Go to Profile
+              </Link>
+            </div>
+          ) : loading ? (
             <div className="flex justify-center items-center h-full">
               <div className="w-8 h-8 border-4 border-neutral-200 border-t-indigo-500 rounded-full animate-spin"></div>
             </div>
@@ -1291,7 +1444,7 @@ export default function ChatPage({ user }: { user: any }) {
                 Unblock Writer
               </button>
             </div>
-          ) : (
+          ) : (activeChat === 'global' || connections[activeChat]) ? (
             <form onSubmit={handleSend} className="flex items-end gap-2 relative">
               
               <div className="relative">
@@ -1443,6 +1596,11 @@ export default function ChatPage({ user }: { user: any }) {
                 </>
               )}
             </form>
+          ) : (
+            <div className="max-w-4xl mx-auto py-3 px-4 bg-amber-50/50 rounded-2xl border border-amber-200/50 text-center flex items-center justify-center gap-2 mb-2">
+               <Lock className="w-4 h-4 text-amber-500" />
+               <p className="text-xs font-bold text-amber-700 uppercase tracking-widest italic">Connection Required - View profile to connect</p>
+            </div>
           )}
         </div>
       </div>

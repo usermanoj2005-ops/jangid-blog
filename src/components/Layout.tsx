@@ -60,7 +60,7 @@ export default function Layout({ children, user }: { children: ReactNode, user: 
               className={`flex flex-col items-center justify-center p-2 text-[10px] font-medium transition-all ${location.pathname === link.path ? 'text-neutral-900 scale-105' : 'text-neutral-400'}`}
             >
               <div className="mb-0.5">{link.icon}</div>
-              <span className="leading-none">{link.name}</span>
+              <span className="leading-none">{link.label}</span>
             </Link>
           ))}
         </div>

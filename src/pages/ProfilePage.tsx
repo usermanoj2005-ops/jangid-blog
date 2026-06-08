@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { LogOut, User, Edit2, Trash2, FileText, Check, X, Calendar } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { LogOut, User, Edit2, Trash2, FileText, Check, X, Calendar, UserPlus, MessageSquare, Clock } from 'lucide-react';
 import { auth, db, rtdb } from '../lib/firebase';
 import { signOut, updateProfile } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, deleteDoc } from 'firebase/firestore';
-import { ref as dbRef, update as dbUpdate } from 'firebase/database';
+import { ref as dbRef, update as dbUpdate, onValue, set, remove, get } from 'firebase/database';
 
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 
 export default function ProfilePage({ user }: { user: any }) {
+  const { userId } = useParams();
+  const isMe = !userId || userId === user?.uid;
+  const targetUid = isMe ? user?.uid : userId;
+
+  const [profileUser, setProfileUser] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -19,9 +24,117 @@ export default function ProfilePage({ user }: { user: any }) {
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // Connection states
+  const [connectionStatus, setConnectionStatus] = useState<'none' | 'pending' | 'accepted' | 'received'>('none');
+  const [requestActionLoading, setRequestActionLoading] = useState(false);
+
   useEffect(() => {
-    fetchMyPosts();
-  }, [user]);
+    if (targetUid) {
+      fetchProfileData();
+      if (!isMe) {
+        checkConnectionStatus();
+      }
+    }
+  }, [targetUid, isMe]);
+
+  const fetchProfileData = async () => {
+    setLoading(true);
+    try {
+      // Fetch User Info from RTDB
+      const userRef = dbRef(rtdb, `users/${targetUid}`);
+      const userSnap = await get(userRef);
+      if (userSnap.exists()) {
+        setProfileUser(userSnap.val());
+      } else if (isMe) {
+        setProfileUser({
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL
+        });
+      }
+
+      // Fetch Posts from Firestore
+      const q = query(collection(db, 'posts'), where('authorId', '==', targetUid));
+      const snapshot = await getDocs(q);
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      fetched.sort((a, b) => {
+        const dateA = (a as any).createdAt?.toDate ? (a as any).createdAt.toDate().getTime() : 0;
+        const dateB = (b as any).createdAt?.toDate ? (b as any).createdAt.toDate().getTime() : 0;
+        return dateB - dateA;
+      });
+      setPosts(fetched);
+    } catch (error) {
+      console.error("Error fetching profile data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkConnectionStatus = () => {
+    if (!user || !targetUid || isMe) return;
+
+    // Check Connections
+    const connRef = dbRef(rtdb, `connections/${user.uid}/${targetUid}`);
+    onValue(connRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setConnectionStatus('accepted');
+      } else {
+        // Check Sent Requests
+        const sentRef = dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`);
+        onValue(sentRef, (sentSnap) => {
+          if (sentSnap.exists()) {
+            setConnectionStatus('pending');
+          } else {
+            // Check Received Requests
+            const receivedRef = dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`);
+            onValue(receivedRef, (recSnap) => {
+              if (recSnap.exists()) {
+                setConnectionStatus('received');
+              } else {
+                setConnectionStatus('none');
+              }
+            });
+          }
+        });
+      }
+    });
+  };
+
+  const handleSendRequest = async () => {
+    if (!user || !targetUid || isMe || requestActionLoading) return;
+    setRequestActionLoading(true);
+    try {
+      await set(dbRef(rtdb, `chat_requests/${targetUid}/${user.uid}`), {
+        senderId: user.uid,
+        senderName: user.displayName || 'Anonymous',
+        senderPhoto: user.photoURL || '',
+        timestamp: Date.now()
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequestActionLoading(false);
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!user || !targetUid || isMe || requestActionLoading) return;
+    setRequestActionLoading(true);
+    try {
+      // Add to both connections
+      await dbUpdate(dbRef(rtdb), {
+        [`connections/${user.uid}/${targetUid}`]: true,
+        [`connections/${targetUid}/${user.uid}`]: true
+      });
+      // Remove request
+      await remove(dbRef(rtdb, `chat_requests/${user.uid}/${targetUid}`));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequestActionLoading(false);
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,15 +230,15 @@ export default function ProfilePage({ user }: { user: any }) {
       {/* Sidebar - Profile Info */}
       <div className="md:col-span-1 space-y-6">
         <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-neutral-100 text-center">
-          <div className="w-24 h-24 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600 mx-auto mb-6 relative group overflow-hidden">
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt={user.displayName || 'User'} className="w-full h-full object-cover" />
+          <div className="w-24 h-24 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600 mx-auto mb-6 relative group overflow-hidden border border-neutral-100">
+            {profileUser?.photoURL ? (
+              <img src={profileUser.photoURL} alt={profileUser.displayName || 'User'} className="w-full h-full object-cover" />
             ) : (
               <User className="w-10 h-10" />
             )}
           </div>
           
-          {isEditing ? (
+          {isMe && isEditing ? (
             <div className="flex justify-center flex-col gap-3 mb-6">
               <div className="space-y-1 text-left">
                 <label className="text-xs font-semibold text-neutral-600">Display Name</label>
@@ -181,15 +294,57 @@ export default function ProfilePage({ user }: { user: any }) {
           ) : (
             <div className="flex items-center justify-center gap-2 mb-2">
               <h1 className="text-2xl font-serif font-bold text-neutral-900">
-                {user?.displayName || 'Anonymous User'}
+                {profileUser?.displayName || 'Anonymous User'}
               </h1>
-              <button onClick={() => { setIsEditing(true); }} className="text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer" title="Edit Profile Details">
-                <Edit2 className="w-4 h-4" />
-              </button>
+              {isMe && (
+                <button onClick={() => { setIsEditing(true); }} className="text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer" title="Edit Profile Details">
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
           
-          <p className="text-neutral-500 text-sm mb-8">{user?.email}</p>
+          <p className="text-neutral-500 text-sm mb-8">{profileUser?.email}</p>
+          
+          {!isMe && (
+            <div className="mb-8">
+              {connectionStatus === 'none' && (
+                <button
+                  onClick={handleSendRequest}
+                  disabled={requestActionLoading}
+                  className="w-full flex items-center justify-center px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-medium rounded-lg text-sm transition-all shadow-md active:scale-95 disabled:bg-neutral-400"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  {requestActionLoading ? 'Sending...' : 'Add Author'}
+                </button>
+              )}
+              {connectionStatus === 'pending' && (
+                <div className="w-full flex items-center justify-center px-6 py-2.5 bg-neutral-100 text-neutral-500 font-medium rounded-lg text-sm border border-neutral-200">
+                  <Clock className="w-4 h-4 mr-2" />
+                  Sent Request
+                </div>
+              )}
+              {connectionStatus === 'received' && (
+                <button
+                  onClick={handleAcceptRequest}
+                  disabled={requestActionLoading}
+                  className="w-full flex items-center justify-center px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-all shadow-md active:scale-95"
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  {requestActionLoading ? 'Accepting...' : 'Accept Request'}
+                </button>
+              )}
+              {connectionStatus === 'accepted' && (
+                <Link
+                  to={`/chat?userId=${targetUid}`}
+                  className="w-full flex items-center justify-center px-6 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-lg text-sm border border-indigo-200 transition-all active:scale-95"
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Continue Chat
+                </Link>
+              )}
+            </div>
+          )}
           
           <div className="pt-6 border-t border-neutral-100 text-left space-y-4">
             <div className="flex items-center justify-between text-sm">
@@ -198,21 +353,23 @@ export default function ProfilePage({ user }: { user: any }) {
             </div>
           </div>
           
-          <div className="pt-8 mt-6 border-t border-neutral-100">
-            <button
-              onClick={() => signOut(auth)}
-              className="w-full flex items-center justify-center px-6 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-lg text-sm transition-colors"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </button>
-          </div>
+          {isMe && (
+            <div className="pt-8 mt-6 border-t border-neutral-100">
+              <button
+                onClick={() => signOut(auth)}
+                className="w-full flex items-center justify-center px-6 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-lg text-sm transition-colors"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Main Content - User's Posts */}
       <div className="md:col-span-2 space-y-6">
-        <h2 className="text-2xl font-serif font-bold text-neutral-900">Your Stories</h2>
+        <h2 className="text-2xl font-serif font-bold text-neutral-900">{isMe ? 'Your Stories' : 'Stories Published'}</h2>
         
         {loading ? (
           <div className="flex justify-center py-12">
@@ -220,10 +377,12 @@ export default function ProfilePage({ user }: { user: any }) {
           </div>
         ) : posts.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-neutral-100 text-center">
-            <p className="text-neutral-500 mb-4">You haven't published any stories yet.</p>
-            <Link to="/write" className="inline-flex items-center px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors">
-              <Edit2 className="w-4 h-4 mr-2" /> Write your first story
-            </Link>
+            <p className="text-neutral-500 mb-4">{isMe ? "You haven't published any stories yet." : "This author hasn't published any stories yet."}</p>
+            {isMe && (
+              <Link to="/write" className="inline-flex items-center px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors">
+                <Edit2 className="w-4 h-4 mr-2" /> Write your first story
+              </Link>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -250,17 +409,19 @@ export default function ProfilePage({ user }: { user: any }) {
                    >
                      View
                    </Link>
-                   <button
-                     onClick={() => handleDeletePost(post.id)}
-                     disabled={deleteLoading === post.id}
-                     className="px-3 py-1.5 text-red-500 hover:bg-red-50 rounded text-sm font-medium transition-colors flex items-center"
-                   >
-                     {deleteLoading === post.id ? (
-                       <span className="w-4 h-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin"></span>
-                     ) : (
-                       <><Trash2 className="w-4 h-4 mr-1 md:mr-0 lg:mr-1" /> <span className="md:hidden lg:inline">Delete</span></>
-                     )}
-                   </button>
+                   {isMe && (
+                     <button
+                       onClick={() => handleDeletePost(post.id)}
+                       disabled={deleteLoading === post.id}
+                       className="px-3 py-1.5 text-red-500 hover:bg-red-50 rounded text-sm font-medium transition-colors flex items-center cursor-pointer"
+                     >
+                       {deleteLoading === post.id ? (
+                         <span className="w-4 h-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin"></span>
+                       ) : (
+                         <><Trash2 className="w-4 h-4 mr-1 md:mr-0 lg:mr-1" /> <span className="md:hidden lg:inline">Delete</span></>
+                       )}
+                     </button>
+                   )}
                 </div>
               </div>
             ))}

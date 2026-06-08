@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref, push, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import { db, rtdb } from '../lib/firebase';
-import { ArrowLeft, Heart, MessageSquare, Share2, Send } from 'lucide-react';
+import { ArrowLeft, Heart, MessageSquare, Share2, Send, UserPlus, User } from 'lucide-react';
 
 export default function PostPage({ user }: { user?: any }) {
   const { id } = useParams();
@@ -185,12 +185,12 @@ export default function PostPage({ user }: { user?: any }) {
         </div>
         {user && post.authorId && post.authorId !== user.uid && (
           <Link
-            to={`/chat?userId=${post.authorId}`}
+            to={`/profile/${post.authorId}`}
             id="message-author-top-btn"
             className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 rounded-full shadow-sm transition-all duration-200 cursor-pointer"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Message Author</span>
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Connect Author</span>
           </Link>
         )}
       </div>
@@ -279,12 +279,12 @@ export default function PostPage({ user }: { user?: any }) {
                     </span>
                     {user && comment.userId && comment.userId !== user.uid && (
                       <Link
-                        to={`/chat?userId=${comment.userId}`}
+                        to={`/profile/${comment.userId}`}
                         className="text-xs font-bold text-indigo-600 hover:text-indigo-850 hover:underline transition-colors flex items-center gap-1"
-                        title={`Message ${comment.userName}`}
+                        title={`View ${comment.userName}'s profile`}
                       >
-                        <MessageSquare className="w-3 h-3 inline" />
-                        <span>Message</span>
+                        <User className="w-3 h-3 inline" />
+                        <span>Profile</span>
                       </Link>
                     )}
                   </div>

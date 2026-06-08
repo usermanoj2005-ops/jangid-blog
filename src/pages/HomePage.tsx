@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { ref, onValue, push, serverTimestamp } from 'firebase/database';
 import { db, rtdb } from '../lib/firebase';
-import { Heart, Send, Sparkles, MessageSquare } from 'lucide-react';
+import { Heart, Send, Sparkles, MessageSquare, UserPlus } from 'lucide-react';
 
 export default function HomePage({ user }: { user?: any }) {
   const [posts, setPosts] = useState<any[]>([]);
@@ -156,18 +156,18 @@ export default function HomePage({ user }: { user?: any }) {
                     {post.excerpt || post.content}
                   </p>
                   <div className="flex items-center text-sm text-neutral-500">
-                    <span className="font-medium text-neutral-900">{post.authorName || 'Anonymous'}</span>
+                    <Link to={`/profile/${post.authorId}`} className="font-semibold text-neutral-900 hover:underline hover:text-indigo-600 transition-colors">{post.authorName || 'Anonymous'}</Link>
                     <span className="mx-2">•</span>
                     <span>{post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Just now'}</span>
                     <div className="ml-auto flex items-center space-x-4">
                       {user && post.authorId && post.authorId !== user.uid && (
                         <Link 
-                          to={`/chat?userId=${post.authorId}`}
-                          className="flex items-center text-indigo-600 hover:text-indigo-850 font-semibold transition-colors gap-1 mr-1 text-xs"
-                          title={`Send Direct Message to ${post.authorName || 'Author'}`}
+                          to={`/profile/${post.authorId}`}
+                          className="flex items-center text-indigo-600 hover:text-indigo-850 font-bold tracking-tight transition-colors gap-1 mr-1 text-xs"
+                          title={`View ${post.authorName || 'Author'}'s profile`}
                         >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>Message</span>
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Connect</span>
                         </Link>
                       )}
                       <span className="flex items-center"><Heart className="w-4 h-4 mr-1" /> {post.likes?.length || 0}</span>
@@ -233,15 +233,15 @@ export default function HomePage({ user }: { user?: any }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-neutral-900 truncate">{feeling.authorName}</span>
+                      <Link to={`/profile/${feeling.authorId}`} className="font-bold text-neutral-900 truncate hover:underline hover:text-indigo-600 transition-colors">{feeling.authorName}</Link>
                       {user && feeling.authorId && feeling.authorId !== user.uid && (
                         <Link 
-                          to={`/chat?userId=${feeling.authorId}`}
-                          className="text-xs text-indigo-600 hover:text-indigo-850 hover:underline flex items-center gap-0.5 transition-colors pl-2 shrink-0 font-sans font-medium"
-                          title={`Message ${feeling.authorName}`}
+                          to={`/profile/${feeling.authorId}`}
+                          className="text-xs text-indigo-600 hover:text-indigo-850 hover:underline flex items-center gap-0.5 transition-colors pl-2 shrink-0 font-sans font-bold"
+                          title={`View ${feeling.authorName}'s profile`}
                         >
-                          <MessageSquare className="w-3 h-3" />
-                          <span>Message</span>
+                          <UserPlus className="w-3 h-3" />
+                          <span>Connect</span>
                         </Link>
                       )}
                     </div>
