@@ -60,16 +60,20 @@ if (typeof window !== 'undefined') {
   } catch (e) {
     console.warn("Direct path to patch window.fetch failed (expected in locked sandbox contexts):", e);
     try {
-      Object.defineProperty(Window.prototype, 'fetch', {
-        get() {
-          return activeFetch;
-        },
-        set(val) {
-          activeFetch = val;
-        },
-        configurable: true,
-        enumerable: true
-      });
+      if (Object.isFrozen(Window.prototype)) {
+        console.warn("Window.prototype is frozen, skipping prototype patch.");
+      } else {
+        Object.defineProperty(Window.prototype, 'fetch', {
+          get() {
+            return activeFetch;
+          },
+          set(val) {
+            activeFetch = val;
+          },
+          configurable: true,
+          enumerable: true
+        });
+      }
     } catch (err) {
       console.warn("Fallback path to patch Window.prototype.fetch failed:", err);
     }

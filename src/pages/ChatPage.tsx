@@ -223,6 +223,14 @@ export default function ChatPage({ user }: { user: any }) {
   const [activeChat, setActiveChat] = useState<'global' | string>('global');
   const [usersInfo, setUsersInfo] = useState<any[]>([]);
   const [userSearchText, setUserSearchText] = useState('');
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+
+  // Switch to chat view automatically when activeChat changes on mobile
+  useEffect(() => {
+    if (activeChat) {
+      setMobileView('chat');
+    }
+  }, [activeChat]);
 
 
 
@@ -801,7 +809,7 @@ export default function ChatPage({ user }: { user: any }) {
   const isSelectedChatBlocked = activeChat !== 'global' && !!blockedUsers[activeChat];
 
   return (
-    <div id="unified-chat-root" className="max-w-6xl mx-auto h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-3xl shadow-2xl border border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans">
+    <div id="unified-chat-root" className="max-w-6xl mx-auto h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-2xl md:rounded-3xl shadow-2xl border border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans">
       
       {/* 📞 INCOMING CALL OVERLAY PANEL */}
       {incomingCall && !callActive && (
@@ -870,7 +878,7 @@ export default function ChatPage({ user }: { user: any }) {
       )}
 
       {/* Sidebar - Users List */}
-      <div className="w-full md:w-80 border-r border-neutral-200 flex flex-col bg-neutral-50 shrink-0">
+      <div className={`w-full md:w-80 border-r border-neutral-200 flex flex-col bg-neutral-50 shrink-0 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
         
         {/* Chat List Header */}
         <div className="p-4 md:p-5 border-b border-neutral-200">
@@ -986,12 +994,21 @@ export default function ChatPage({ user }: { user: any }) {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white">
+      <div className={`flex-1 flex flex-col min-w-0 bg-white ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
         
         {/* Header */}
-        <div className="bg-white border-b border-neutral-200 p-4 flex items-center justify-between z-10 shrink-0 relative">
+        <div className="bg-white border-b border-neutral-200 p-3 md:p-4 flex items-center justify-between z-10 shrink-0 relative">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 relative overflow-hidden border border-neutral-200">
+            {/* Back button on mobile */}
+            <button 
+              onClick={() => setMobileView('list')}
+              className="md:hidden p-2 -ml-2 text-neutral-500 hover:text-neutral-900"
+              title="Back to chat list"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 relative overflow-hidden border border-neutral-200">
               {activeChat === 'global' ? (
                 <div className="w-full h-full bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
                   <Users className="w-5 h-5" />

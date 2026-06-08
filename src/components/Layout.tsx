@@ -52,20 +52,21 @@ export default function Layout({ children, user }: { children: ReactNode, user: 
         </div>
         
         {/* Mobile Navigation */}
-        <div className="md:hidden border-t border-neutral-100 flex justify-around p-2">
+        <div className="md:hidden border-t border-neutral-100 flex justify-around p-2 bg-white/80 backdrop-blur-md">
           {navLinks.map((link) => (
             <Link 
               key={link.path} 
               to={link.path}
-              className={`flex flex-col items-center justify-center p-2 text-xs font-medium ${location.pathname === link.path ? 'text-neutral-900' : 'text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center p-2 text-[10px] font-medium transition-all ${location.pathname === link.path ? 'text-neutral-900 scale-105' : 'text-neutral-400'}`}
             >
-              {link.icon}
+              <div className="mb-0.5">{link.icon}</div>
+              <span className="leading-none">{link.name}</span>
             </Link>
           ))}
         </div>
       </header>
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 md:px-8 py-8">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 md:px-8 py-4 md:py-8">
         {children}
       </main>
     </div>
