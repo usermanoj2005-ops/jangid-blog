@@ -2,21 +2,57 @@
 if (typeof window !== 'undefined') {
   try {
     const originalFetch = window.fetch;
+    // Making window.fetch fully writable and configurable via a data descriptor
+    // guarantees any third-party assignment to window.fetch works without throwing 
+    // "Cannot set property fetch of #<Window> which has only a getter" exceptions.
     Object.defineProperty(window, 'fetch', {
-      get() {
-        return originalFetch;
-      },
-      set(val) {
-        console.warn("Muted attempt to overwrite window.fetch:", val);
-      },
+      value: originalFetch,
+      writable: true,
       configurable: true,
       enumerable: true
     });
   } catch (e) {
-    console.warn("Failed to patch window.fetch property descriptor:", e);
+    console.warn("Failed to patch window.fetch property descriptor with data descriptor:", e);
+    try {
+      const originalFetch = window.fetch;
+      Object.defineProperty(window, 'fetch', {
+        get() {
+          return originalFetch;
+        },
+        set(val) {
+          console.warn("Muted attempt to overwrite window.fetch:", val);
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (err) {
+      console.warn("Failed to fallback patch window.fetch:", err);
+    }
   }
 
-  // Prevent JSON.parse("undefined") SyntaxErrors
+  // Globally prevent JSON.parse("undefined") SyntaxErrors
+  try {
+    const originalParse = JSON.parse;
+    JSON.parse = function (text: any, reviver?: any) {
+      if (text === 'undefined') {
+        return undefined;
+      }
+      if (text === '' || text === null || text === undefined) {
+        return null;
+      }
+      if (typeof text === 'string') {
+        const trimmed = text.trim();
+        if (trimmed === 'undefined') {
+          return undefined;
+        }
+      }
+      return originalParse.call(JSON, text as string, reviver);
+    };
+  } catch (e) {
+    console.warn("Failed to patch JSON.parse:", e);
+  }
+
+  // Prevent JSON.parse("undefined") Storage getItem SyntaxErrors
   try {
     const originalGetItem = Storage.prototype.getItem;
     Storage.prototype.getItem = function (key) {

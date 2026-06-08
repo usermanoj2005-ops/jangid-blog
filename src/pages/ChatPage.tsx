@@ -31,7 +31,9 @@ import {
   Check, 
   X, 
   SmilePlus, 
-  AlertCircle 
+  AlertCircle,
+  Play,
+  Pause
 } from 'lucide-react';
 
 // Categorized search library for emojis
@@ -83,9 +85,131 @@ const EMOJI_LIBRARY = [
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '💡'];
 
+function VoiceMessagePlayer({ audioUrl, isMe }: { audioUrl: string; isMe: boolean }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+    const onLoadedMetadata = () => {
+      setDuration(audio.duration || 0);
+    };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('ended', onEnded);
+
+    // If already loaded
+    if (audio.duration) {
+      setDuration(audio.duration);
+    }
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('ended', onEnded);
+      audioRef.current = null;
+    };
+  }, [audioUrl]);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(err => console.warn("Audio play failed:", err));
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!audioRef.current) return;
+    const time = parseFloat(e.target.value);
+    audioRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const formatDuration = (secs: number) => {
+    if (isNaN(secs) || !isFinite(secs)) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className={`flex items-center gap-3 py-1.5 px-2.5 rounded-xl min-w-[200px] sm:min-w-[240px] border ${
+      isMe 
+        ? 'bg-indigo-705 bg-indigo-700/60 text-white border-white/10' 
+        : 'bg-neutral-50 border-neutral-200 text-neutral-900'
+    }`}>
+      <button
+        type="button"
+        onClick={togglePlay}
+        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer shadow-xs ${
+          isMe 
+            ? 'bg-white hover:bg-neutral-100 text-indigo-700' 
+            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+        }`}
+        title={isPlaying ? "Pause voice message" : "Play voice message"}
+      >
+        {isPlaying ? (
+          <Pause className="w-3.5 h-3.5 fill-current" />
+        ) : (
+          <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+        )}
+      </button>
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={handleSeek}
+          className={`w-full h-1 rounded-lg appearance-none cursor-pointer ${
+            isMe ? 'accent-white bg-indigo-900/40' : 'accent-indigo-600 bg-neutral-250'
+          }`}
+        />
+        <div className={`flex justify-between items-center text-[10px] font-mono leading-none ${
+          isMe ? 'text-indigo-200' : 'text-neutral-500 font-semibold'
+        }`}>
+          <span>{formatDuration(currentTime)}</span>
+          <div className="flex items-center gap-1">
+            <Volume2 className={`w-3 h-3 ${isMe ? 'text-indigo-300' : 'text-neutral-400'}`} />
+            <span>{formatDuration(duration || 0)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPage({ user }: { user: any }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
+
+  // Voice recording states
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceTimerRef = useRef<any>(null);
   const [showEmojis, setShowEmojis] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState('');
   const [activeEmojiTab, setActiveEmojiTab] = useState<'All' | 'Smileys' | 'Gestures' | 'Symbols'>('All');
@@ -99,6 +223,8 @@ export default function ChatPage({ user }: { user: any }) {
   const [activeChat, setActiveChat] = useState<'global' | string>('global');
   const [usersInfo, setUsersInfo] = useState<any[]>([]);
   const [userSearchText, setUserSearchText] = useState('');
+
+
 
   // Handle load-time search params parameter for selecting specific user
   useEffect(() => {
@@ -493,6 +619,110 @@ export default function ChatPage({ user }: { user: any }) {
     }
   };
 
+  // Clean up recording timers on unmount
+  useEffect(() => {
+    return () => {
+      if (voiceTimerRef.current) {
+        clearInterval(voiceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Voice recording routines
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceChunksRef.current = [];
+      
+      let recorder: MediaRecorder;
+      const options = { mimeType: 'audio/webm' };
+      try {
+        recorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        // Fallback for systems (like some Mac/iOS/Safari versions) that do not support webm
+        recorder = new MediaRecorder(stream);
+      }
+      
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          voiceChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        // Stop all track devices to fully release microphone access
+        stream.getTracks().forEach(track => track.stop());
+        
+        const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size === 0) return;
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64Audio = reader.result as string;
+          await sendVoiceMessage(base64Audio);
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      recorder.start();
+      setIsRecordingVoice(true);
+      setVoiceSeconds(0);
+
+      voiceTimerRef.current = setInterval(() => {
+        setVoiceSeconds(prev => prev + 1);
+      }, 1000);
+
+    } catch (err: any) {
+      console.warn("Microphone access failed:", err);
+      alert("Microphone permission was denied, or the active layout environment did not provide mic access.");
+    }
+  };
+
+  const stopVoiceRecording = (shouldSend: boolean) => {
+    if (voiceTimerRef.current) {
+      clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      if (!shouldSend) {
+        recorder.onstop = () => {
+          recorder.stream.getTracks().forEach(track => track.stop());
+        };
+      }
+      recorder.stop();
+    }
+
+    setIsRecordingVoice(false);
+    setVoiceSeconds(0);
+  };
+
+  const sendVoiceMessage = async (base64Audio: string) => {
+    if (!base64Audio) return;
+    let messagesNode = 'messages';
+    if (activeChat !== 'global') {
+      const ids = [user.uid, activeChat].sort();
+      messagesNode = `direct_messages/${ids[0]}_${ids[1]}`;
+    }
+
+    try {
+      await push(ref(rtdb, messagesNode), {
+        text: "[Voice Message]",
+        voiceUrl: base64Audio,
+        authorId: user.uid,
+        authorName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+        authorPhoto: user.photoURL || '',
+        timestamp: rtdbServerTimestamp()
+      });
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+    }
+  };
+
   // Quick or emoji picker insert
   const insertEmoji = (emojiChar: string) => {
     setNewMessage(prev => prev + emojiChar);
@@ -672,6 +902,8 @@ export default function ChatPage({ user }: { user: any }) {
               </button>
             )}
           </div>
+
+
         </div>
         
         {/* Chats / Users Queue */}
@@ -773,7 +1005,7 @@ export default function ChatPage({ user }: { user: any }) {
               )}
             </div>
             <div>
-              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900 flex items-center gap-2">
+              <h1 id="active-chat-title" className="text-base md:text-lg font-serif font-bold text-neutral-900">
                 {activeChat === 'global' ? 'Community Chat' : `${activeUserObj?.displayName}`}
               </h1>
               <p className="text-xs text-neutral-500">
@@ -943,13 +1175,21 @@ export default function ChatPage({ user }: { user: any }) {
                     {/* Message Bubble */}
                     <div className="relative leading-relaxed">
                       <div 
-                        className={`px-4 py-2.5 rounded-2xl text-[14px] leading-relaxed break-words shadow-sm relative group/bubble select-text ${
-                          isMe 
-                            ? 'bg-indigo-600 text-white rounded-tr-none' 
-                            : 'bg-white text-neutral-900 rounded-tl-none border border-neutral-2/100 border-neutral-200'
+                        className={`rounded-2xl text-[14px] leading-relaxed break-words relative group/bubble select-text ${
+                          msg.voiceUrl
+                            ? 'p-0 bg-transparent shadow-none'
+                            : `px-4 py-2.5 shadow-sm ${
+                                isMe 
+                                  ? 'bg-indigo-600 text-white rounded-tr-none' 
+                                  : 'bg-white text-neutral-900 rounded-tl-none border border-neutral-2/100 border-neutral-200'
+                              }`
                         }`}
                       >
-                        {msg.text}
+                        {msg.voiceUrl ? (
+                          <VoiceMessagePlayer audioUrl={msg.voiceUrl} isMe={isMe} />
+                        ) : (
+                          msg.text
+                        )}
 
                         {/* HOVER HOVER CONTROLS TOOLBAR (Quick reactions & deletes) */}
                         <div 
@@ -1117,29 +1357,74 @@ export default function ChatPage({ user }: { user: any }) {
                 )}
               </div>
 
-              {/* Chat Input Text Box */}
-              <textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e);
-                  }
-                }}
-                placeholder={activeChat === 'global' ? "Write message to global channel... (Press Enter to send)" : `Write direct message to ${activeUserObj?.displayName || 'Author'}...`}
-                className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px]"
-                rows={1}
-              />
+              {/* Voice Message Mic Button */}
+              {!isRecordingVoice && (
+                <button
+                  type="button"
+                  onClick={startVoiceRecording}
+                  className="p-3 text-neutral-500 hover:text-indigo-600 hover:bg-neutral-100 rounded-full transition-all shrink-0 cursor-pointer"
+                  title="Record voice message"
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              )}
 
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={!newMessage.trim()}
-                className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-100 disabled:text-neutral-400 disabled:opacity-45 text-white rounded-full transition-all shrink-0 mb-1 cursor-pointer hover:shadow shadow active:scale-95 flex items-center justify-center"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+              {isRecordingVoice ? (
+                <div className="flex-1 flex items-center justify-between bg-rose-50 border border-rose-200 rounded-2xl py-2.5 px-4 animate-pulse">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping shrink-0" />
+                    <span className="text-xs font-bold text-rose-800 tracking-wide font-sans">Recording...</span>
+                    <span className="font-mono text-xs font-bold text-rose-900 bg-rose-100 px-2 py-0.5 rounded-lg select-none">
+                      {formatTime(voiceSeconds)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => stopVoiceRecording(false)}
+                      className="p-2 text-rose-600 hover:bg-rose-100 hover:text-rose-700 active:scale-95 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                      title="Discard Voice Message"
+                    >
+                      <Trash2 className="w-4.5 h-4.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => stopVoiceRecording(true)}
+                      className="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer leading-none px-3 font-semibold"
+                      title="Send Voice Message"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span className="text-xs font-bold font-sans">Send</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Chat Input Text Box */}
+                  <textarea
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e);
+                      }
+                    }}
+                    placeholder={activeChat === 'global' ? "Write message to global channel... (Press Enter to send)" : `Write direct message to ${activeUserObj?.displayName || 'Author'}...`}
+                    className="flex-1 max-h-32 min-h-[48px] bg-white text-neutral-900 placeholder-neutral-500 border border-neutral-200 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 resize-none text-[14px]"
+                    rows={1}
+                  />
+
+                  {/* Send Button */}
+                  <button
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-100 disabled:text-neutral-400 disabled:opacity-45 text-white rounded-full transition-all shrink-0 mb-1 cursor-pointer hover:shadow shadow active:scale-95 flex items-center justify-center"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </form>
           )}
         </div>

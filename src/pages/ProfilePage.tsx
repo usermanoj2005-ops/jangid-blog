@@ -127,17 +127,21 @@ export default function ProfilePage({ user }: { user: any }) {
           
           {isEditing ? (
             <div className="flex justify-center flex-col gap-3 mb-6">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Display Name"
-                className="border border-neutral-200 rounded px-3 py-1.5 text-sm w-full font-medium text-center focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                autoFocus
-                disabled={updateLoading}
-              />
-              <div className="flex flex-col items-center gap-2">
-                <label className="text-xs font-medium text-neutral-500 w-full text-left">Profile Image</label>
+              <div className="space-y-1 text-left">
+                <label className="text-xs font-semibold text-neutral-600">Display Name</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Display Name"
+                  className="border border-neutral-200 rounded px-3 py-1.5 text-sm w-full font-medium focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                  autoFocus
+                  disabled={updateLoading}
+                />
+              </div>
+
+              <div className="flex flex-col items-center gap-2 pt-1">
+                <label className="text-xs font-medium text-neutral-500 w-full text-left font-semibold">Profile Image</label>
                 <input
                   type="text"
                   value={photoURL}
@@ -158,13 +162,17 @@ export default function ProfilePage({ user }: { user: any }) {
                 </label>
               </div>
               <div className="flex justify-center gap-2 mt-2">
-                <button onClick={handleUpdateProfile} disabled={updateLoading} className="text-green-600 p-1.5 px-3 bg-green-50 hover:bg-green-100 rounded text-sm font-medium transition-colors flex items-center">
+                <button onClick={handleUpdateProfile} disabled={updateLoading} className="text-green-600 p-1.5 px-3 bg-green-50 hover:bg-green-100 rounded text-sm font-medium transition-colors flex items-center cursor-pointer">
                   <Check className="w-4 h-4 mr-1" /> Save
                 </button>
                 <button 
-                  onClick={() => { setIsEditing(false); setNewName(user?.displayName || ''); setPhotoURL(user?.photoURL || ''); }} 
+                  onClick={() => { 
+                    setIsEditing(false); 
+                    setNewName(user?.displayName || ''); 
+                    setPhotoURL(user?.photoURL || ''); 
+                  }} 
                   disabled={updateLoading} 
-                  className="text-red-500 p-1.5 px-3 bg-red-50 hover:bg-red-100 rounded text-sm font-medium transition-colors flex items-center"
+                  className="text-red-500 p-1.5 px-3 bg-red-50 hover:bg-red-100 rounded text-sm font-medium transition-colors flex items-center cursor-pointer"
                 >
                   <X className="w-4 h-4 mr-1" /> Cancel
                 </button>
@@ -175,7 +183,7 @@ export default function ProfilePage({ user }: { user: any }) {
               <h1 className="text-2xl font-serif font-bold text-neutral-900">
                 {user?.displayName || 'Anonymous User'}
               </h1>
-              <button onClick={() => setIsEditing(true)} className="text-neutral-400 hover:text-neutral-900 transition-colors">
+              <button onClick={() => { setIsEditing(true); }} className="text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer" title="Edit Profile Details">
                 <Edit2 className="w-4 h-4" />
               </button>
             </div>

@@ -1,6 +1,6 @@
 {
   "name": "Jangid Blog",
   "description": "A polished editorial login and sign-up page for Jangid Blog.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
