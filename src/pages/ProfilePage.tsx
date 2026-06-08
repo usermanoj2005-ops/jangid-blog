@@ -358,13 +358,28 @@ export default function ProfilePage({ user }: { user: any }) {
     try {
       const finalName = newName.trim() || user.displayName;
       const finalPhoto = photoURL.trim() || null;
+      
       if (auth.currentUser && (nameChanged || photoChanged)) {
-        await updateProfile(auth.currentUser, { 
-          displayName: finalName,
-          photoURL: finalPhoto
-        });
+        try {
+          // Firebase Auth has a strict sub-2048 character limit on photoURL.
+          // If the chosen avatar URL is too long or is a heavy Base64 image, we provide a clean, short placeholder
+          // for the Firebase Auth system. The full high-fidelity image is stored/saved in the Realtime Database
+          // below so it displays perfectly across all feeds, profiles, and chats.
+          let authPhoto = finalPhoto;
+          if (finalPhoto && (finalPhoto.length > 2000 || finalPhoto.startsWith('data:'))) {
+            authPhoto = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(finalName)}`;
+          }
+          
+          await updateProfile(auth.currentUser, { 
+            displayName: finalName,
+            photoURL: authPhoto
+          });
+        } catch (authErr) {
+          console.warn("Could not update Firebase Auth profile attributes directly (likely due to character limits), proceeding with Realtime Database synchronization:", authErr);
+        }
       }
-      // Synchronize to Firebase Realtime Database
+      
+      // Synchronize to Firebase Realtime Database (where there are no strict length restrictions)
       try {
         await dbUpdate(dbRef(rtdb, `users/${user.uid}`), {
           displayName: finalName,
@@ -372,12 +387,14 @@ export default function ProfilePage({ user }: { user: any }) {
           chatBgColor: chatBgColor
         });
       } catch (dbErr) {
-        console.warn("Could not sync profile update to presence database database", dbErr);
+        console.warn("Could not sync profile update to presence database", dbErr);
       }
+      
       setIsEditing(false);
       setProfileUser((prev: any) => prev ? { ...prev, displayName: finalName, photoURL: finalPhoto || '', chatBgColor } : null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating profile:", error);
+      alert("Error updating profile: " + (error?.message || error));
     } finally {
       setUpdateLoading(false);
     }

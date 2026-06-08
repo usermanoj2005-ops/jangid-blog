@@ -36,7 +36,8 @@ import {
   SmilePlus, 
   AlertCircle,
   Play,
-  Pause
+  Pause,
+  ArrowLeft
 } from 'lucide-react';
 
 // Categorized search library for emojis
@@ -1124,7 +1125,7 @@ export default function ChatPage({ user }: { user: any }) {
   const isSelectedChatBlocked = activeChat !== 'global' && !!blockedUsers[activeChat];
 
   return (
-    <div id="unified-chat-root" className="max-w-6xl mx-auto h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-2xl md:rounded-3xl shadow-2xl border border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans">
+    <div id="unified-chat-root" className="w-full max-w-6xl mx-auto h-[calc(100vh-124px)] md:h-[calc(100vh-140px)] bg-white text-neutral-900 rounded-none md:rounded-3xl md:shadow-2xl md:border md:border-neutral-200 overflow-hidden flex flex-col md:flex-row relative font-sans">
       
       {/* 📞 INCOMING CALL OVERLAY PANEL */}
       {incomingCall && !callActive && (
@@ -1411,10 +1412,10 @@ export default function ChatPage({ user }: { user: any }) {
             {/* Back button on mobile */}
             <button 
               onClick={() => setMobileView('list')}
-              className="md:hidden p-2 -ml-2 text-neutral-500 hover:text-neutral-900"
+              className="md:hidden p-2 -ml-2 text-neutral-500 hover:text-neutral-900 active:scale-95 transition-all"
               title="Back to chat list"
             >
-              <X className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5" />
             </button>
 
             <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 relative overflow-hidden border border-neutral-200">
