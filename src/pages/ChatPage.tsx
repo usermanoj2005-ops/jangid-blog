@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   ref, 
   onValue, 
@@ -92,9 +93,23 @@ export default function ChatPage({ user }: { user: any }) {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectUserParam = searchParams.get('userId');
+
   const [activeChat, setActiveChat] = useState<'global' | string>('global');
   const [usersInfo, setUsersInfo] = useState<any[]>([]);
   const [userSearchText, setUserSearchText] = useState('');
+
+  // Handle load-time search params parameter for selecting specific user
+  useEffect(() => {
+    if (selectUserParam) {
+      setActiveChat(selectUserParam);
+      // Clean up search parameters to allow user to switch chats normally
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('userId');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [selectUserParam, setSearchParams, searchParams]);
 
   // Blocking features
   const [blockedUsers, setBlockedUsers] = useState<Record<string, boolean>>({});

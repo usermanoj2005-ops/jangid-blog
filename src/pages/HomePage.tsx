@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { ref, onValue, push, serverTimestamp } from 'firebase/database';
 import { db, rtdb } from '../lib/firebase';
-import { Heart, Send, Sparkles } from 'lucide-react';
+import { Heart, Send, Sparkles, MessageSquare } from 'lucide-react';
 
 export default function HomePage({ user }: { user?: any }) {
   const [posts, setPosts] = useState<any[]>([]);
@@ -81,6 +81,7 @@ export default function HomePage({ user }: { user?: any }) {
       await push(ref(rtdb, 'feelings'), {
         text: feelingInput.trim(),
         authorName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+        authorId: user.uid,
         createdAt: serverTimestamp()
       });
       setFeelingInput('');
@@ -159,6 +160,16 @@ export default function HomePage({ user }: { user?: any }) {
                     <span className="mx-2">•</span>
                     <span>{post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Just now'}</span>
                     <div className="ml-auto flex items-center space-x-4">
+                      {user && post.authorId && post.authorId !== user.uid && (
+                        <Link 
+                          to={`/chat?userId=${post.authorId}`}
+                          className="flex items-center text-indigo-600 hover:text-indigo-850 font-semibold transition-colors gap-1 mr-1 text-xs"
+                          title={`Send Direct Message to ${post.authorName || 'Author'}`}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Message</span>
+                        </Link>
+                      )}
                       <span className="flex items-center"><Heart className="w-4 h-4 mr-1" /> {post.likes?.length || 0}</span>
                       <span className="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-message-square mr-1"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> {post.comments?.length || 0}</span>
                     </div>
@@ -220,10 +231,22 @@ export default function HomePage({ user }: { user?: any }) {
                   <div className="w-6 h-6 rounded-full bg-neutral-200 flex items-center justify-center text-xs shrink-0 font-medium text-neutral-600">
                     {feeling.authorName.charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <span className="font-semibold text-neutral-900">{feeling.authorName}</span>
-                    <span className="text-neutral-500 ml-1">is feeling</span>
-                    <p className="text-neutral-800 mt-0.5 font-medium">{feeling.text}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-neutral-900 truncate">{feeling.authorName}</span>
+                      {user && feeling.authorId && feeling.authorId !== user.uid && (
+                        <Link 
+                          to={`/chat?userId=${feeling.authorId}`}
+                          className="text-xs text-indigo-600 hover:text-indigo-850 hover:underline flex items-center gap-0.5 transition-colors pl-2 shrink-0 font-sans font-medium"
+                          title={`Message ${feeling.authorName}`}
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>Message</span>
+                        </Link>
+                      )}
+                    </div>
+                    <span className="text-neutral-500 text-xs">is feeling</span>
+                    <p className="text-neutral-800 mt-0.5 font-medium text-sm break-words">{feeling.text}</p>
                   </div>
                 </div>
               ))}
